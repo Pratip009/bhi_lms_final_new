@@ -1,0 +1,133 @@
+import Link from "next/link";
+import { todayLocal, thisMonthLocal } from "@/lib/dates";
+import { notFound } from "next/navigation";
+import { cols } from "@/db";
+import { requireAdmin } from "@/lib/auth";
+import { CATEGORY_LABELS, describeEnrollment } from "@/lib/forms/templates";
+import { getClassWithCourse, instructorsForClasses, rosterForClass, usersById } from "@/lib/queries";
+import { ActionButton, AssignInstructorForm, ClassForm, MergeSectionsForm, MoveStudentForm } from "@/components/action-widgets";
+import { AssignStudentToThisClass } from "@/components/assign-student";
+import { Card, Empty, PageHeader, StatusBadge, Table, Td, fmtDate } from "@/components/ui";
+import { CheckInPanel } from "@/components/checkin-panel";
+import { startCheckInAction, closeCheckInAction } from "@/lib/actions/checkin";
+import {
+  archiveClassAction, assignInstructorAction, endEnrollmentAction, mergeSectionsAction, moveStudentAction, removeInstructorAction, saveClassAction,
+} from "../../actions";
+
+export default async function AdminClassPage({ params }: { params: Promise<{ id: string }> }) {
+  await requireAdmin();
+  const { id } = await params;
+  if (!/^[0-9a-f-]{36}$/.test(id)) notFound();
+  const row = await getClassWithCourse(id);
+  if (!row) notFound();
+  const { klass, course } = row;
+  const { users, applications, classSessions, progressReports, classes, courses, courseAssignments } = await cols();
+  const roster = await rosterForClass(id);
+  const instructors = await instructorsForClasses([klass]);
+  const approvedInstructors = await users.find({ role: "INSTRUCTOR", instructorStatus: "APPROVED", disabledAt: null }, { projection: { _id: 1, name: 1, email: 1 } }).sort({ name: 1 }).toArray();
+
+  // Approved students not already active in this class.
+  const approvedIds: string[] = await applications.distinct("studentId", { status: "APPROVED" });
+  const disabled = new Set((await users.find({ _id: { $in: approvedIds }, disabledAt: { $ne: null } }, { projection: { _id: 1 } }).toArray()).map((u) => u._id));
+  const activeIds = new Set(roster.filter((r) => r.enrollment.status === "ACTIVE").map((r) => r.student._id));
+  const assignable = [...(await usersById(approvedIds.filter((s) => !activeIds.has(s) && !disabled.has(s)))).values()].sort((a, b) => a.name.localeCompare(b.name));
+
+  const sessions = await classSessions.find({ classId: id }).toArray();
+  const thisMonth = thisMonthLocal();
+  const reports = await progressReports.find({ enrollmentId: { $in: roster.map((r) => r.enrollment._id) }, month: thisMonth }, { projection: { data: 0 } }).toArray();
+  const today = todayLocal();
+  const appsByStudent = new Map((await applications.find({ studentId: { $in: roster.map((r) => r.student._id) } }, { projection: { studentId: 1, category: 1, county: 1 } }).toArray()).map((a) => [a.studentId, a]));
+  // Sections a student can be moved to: open sections of any open course (same course first).
+  const openCourses = new Map((await courses.find({ archived: false }).toArray()).map((c) => [c._id, c]));
+  const openSections = (await classes.find({ archived: false, _id: { $ne: id } }).sort({ startDate: 1 }).toArray()).filter((k) => openCourses.has(k.courseId));
+  const moveTargets = openSections
+    .map((k) => ({ id: k._id, label: `${k.courseId === klass.courseId ? "" : "[other course] "}${openCourses.get(k.courseId)!.name}: ${k.code}, ${k.cohort}`, same: k.courseId === klass.courseId }))
+    .sort((a, b) => Number(b.same) - Number(a.same) || a.label.localeCompare(b.label));
+  const mergeable = openSections.filter((k) => k.courseId === klass.courseId).map((k) => ({ id: k._id, label: `${k.code}, ${k.cohort}` }));
+  const courseInstructors = await usersById((await courseAssignments.find({ courseId: klass.courseId, removedAt: null }).toArray()).map((a) => a.instructorId));
+  const mergedInto = klass.mergedIntoClassId ? await classes.findOne({ _id: klass.mergedIntoClassId }, { projection: { code: 1 } }) : null;
+
+  return (
+    <>
+      <Link href={`/admin/courses/${course._id}`} className="text-sm text-pine-700 underline">{course.name}</Link>
+      <PageHeader title={`${klass.code}, ${klass.cohort}`}
+        description={`${course.name}. ${fmtDate(klass.startDate)} to ${fmtDate(klass.endDate)}${klass.schedule ? `, ${klass.schedule}` : ""}`}
+        actions={
+          <>
+            <a href={`/api/pdf/attendance/${klass._id}?from=${klass.startDate}&to=${today < klass.endDate ? today : klass.endDate}`} className="rounded-md border border-line bg-white px-4 py-2 text-sm font-semibold">Attendance sheet (PDF)</a>
+            <a href={`/api/export/attendance?classId=${klass._id}`} className="rounded-md border border-line bg-white px-4 py-2 text-sm font-semibold">Export CSV</a>
+          </>
+        } />
+      {mergedInto && <p className="mb-4 rounded-md bg-mist p-3 text-sm">This section was merged into <Link href={`/admin/classes/${klass.mergedIntoClassId}`} className="font-semibold underline">{mergedInto.code}</Link> on {fmtDate(klass.mergedAt)}. Its records are kept here.</p>}
+      {!klass.archived && today >= klass.startDate && today <= klass.endDate && activeIds.size > 0 && (
+        <CheckInPanel classId={klass._id} start={startCheckInAction.bind(null, klass._id)} close={closeCheckInAction.bind(null, klass._id)} />
+      )}
+      <div className="space-y-6">
+        <Card title={`Roster (${activeIds.size}/${klass.capacity})`}>
+          {roster.length === 0 ? <Empty>No students yet.</Empty> : (
+            <Table head={["Student", "Program", "Status", "Attended", "Attendance sheet", `Report ${thisMonth}`, ""]}>
+              {roster.map(({ enrollment, student, category }) => {
+                const a = appsByStudent.get(student._id);
+                const marks = sessions.map((s) => s.records[enrollment._id]).filter(Boolean);
+                const attended = marks.filter((r) => r.status === "PRESENT" || r.status === "LATE").length;
+                const rep = reports.find((r) => r.enrollmentId === enrollment._id);
+                return (
+                  <tr key={enrollment._id}>
+                    <Td><Link href={`/admin/students/${student._id}`} className="font-semibold text-pine-700 underline">{student.name}</Link></Td>
+                    <Td>{a ? describeEnrollment(a) : category ? CATEGORY_LABELS[category] : "-"}</Td>
+                    <Td><StatusBadge status={enrollment.status} /></Td>
+                    <Td className="tabular-nums">{attended}/{sessions.length}</Td>
+                    <Td><Link href={`/admin/attendance/sheets/${enrollment._id}`} className="underline">{a?.category === "EQISS" ? "Biweekly report" : "Monthly sheet"}</Link></Td>
+                    <Td>{rep ? <Link href={`/admin/reports/${rep._id}`} className="underline">{rep.status === "SUBMITTED" ? "Submitted" : "Draft"}</Link> : <span className="text-slate-500">Not started</span>}</Td>
+                    <Td>{enrollment.status === "ACTIVE" && (
+                      <details>
+                        <summary className="cursor-pointer text-sm font-semibold text-pine-700">Move / withdraw</summary>
+                        <div className="mt-3 w-64 space-y-4">
+                          {moveTargets.length > 0 && <MoveStudentForm action={moveStudentAction} enrollmentId={enrollment._id} sections={moveTargets} />}
+                          <ActionButton action={endEnrollmentAction} label="Withdraw" variant="ghost" hidden={{ enrollmentId: enrollment._id, status: "WITHDRAWN" }} confirm={`Withdraw ${student.name} from this section? Records are kept.`} />
+                        </div>
+                      </details>
+                    )}</Td>
+                  </tr>
+                );
+              })}
+            </Table>
+          )}
+          {!klass.archived && assignable.length > 0 && (
+            <div className="mt-5 border-t border-line pt-5">
+              <h3 className="mb-3 text-sm font-semibold">Add an approved student</h3>
+              <AssignStudentToThisClass classId={klass._id} students={assignable.map((s) => ({ id: s._id, label: `${s.name} (${s.email})` }))} />
+            </div>
+          )}
+        </Card>
+
+        {!klass.archived && mergeable.length > 0 && (
+          <Card title="Merge sections"><MergeSectionsForm action={mergeSectionsAction.bind(null, klass._id)} sections={mergeable} /></Card>
+        )}
+        <Card title="Instructors">
+          <p className="mb-4 text-sm">Course instructors (have access to every section): {[...courseInstructors.values()].map((u) => u.name).join(", ") || <span className="text-marigold-700">none. <Link href={`/admin/courses/${course._id}`} className="underline">Assign on the course page</Link></span>}</p>
+          <h3 className="mb-2 text-sm font-semibold">Assigned to this section only</h3>
+          {instructors.length === 0 ? <p className="mb-4 text-sm text-marigold-700">No instructor assigned.</p> : (
+            <ul className="mb-5 divide-y divide-line">
+              {instructors.map((i) => (
+                <li key={i._id} className="flex items-center justify-between gap-3 py-2 text-sm">
+                  <span><Link href={`/admin/instructors/${i._id}`} className="font-semibold text-pine-700 underline">{i.name}</Link> ({i.role === "LEAD" ? "Lead" : "Assistant"})</span>
+                  <ActionButton action={removeInstructorAction.bind(null, klass._id)} label="Remove" variant="ghost" hidden={{ instructorId: i._id }} confirm={`Remove ${i.name} from this class?`} />
+                </li>
+              ))}
+            </ul>
+          )}
+          {approvedInstructors.length ? (
+            <AssignInstructorForm action={assignInstructorAction.bind(null, klass._id)} instructors={approvedInstructors.map((i) => ({ id: i._id, label: `${i.name} (${i.email})` }))} />
+          ) : (
+            <p className="text-sm text-slate-600">No approved instructors yet. <Link href="/admin/instructors" className="underline">Review instructor sign-ups</Link>.</p>
+          )}
+        </Card>
+
+        <Card title="Class details" actions={<ActionButton action={archiveClassAction.bind(null, klass._id)} label={klass.archived ? "Restore" : "Archive"} variant="ghost" confirm={klass.archived ? undefined : "Archive this class? Its records are kept."} />}>
+          <ClassForm action={saveClassAction.bind(null, course._id, klass._id)} values={klass} submitLabel="Save class" />
+        </Card>
+      </div>
+    </>
+  );
+}
