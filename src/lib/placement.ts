@@ -25,27 +25,44 @@ const addDays = (date: string, days: number) => {
 export const fundingFits = (klass: Pick<Klass, "fundingProgram">, category: Category | null) =>
   klass.fundingProgram === "MIXED" || (!!category && klass.fundingProgram === category);
 
-/** Finds or creates the course's default section. Safe under concurrency (unique class code). */
+/**
+ * Finds or creates the course's default section. Safe under concurrency (unique class code).
+ * It is a rolling section: when it gets near its end date it is extended, so a student approved a
+ * year later is never placed in a section that has already ended. An archived default section is
+ * never reused: a new one is made with a numbered code.
+ */
 export async function ensureDefaultSection(course: Course): Promise<Klass> {
   const { classes } = await cols();
-  const code = `${course.name.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 24).toUpperCase() || "COURSE"}-GEN-${course._id.slice(0, 4).toUpperCase()}`;
-  const existing = await classes.findOne({ courseId: course._id, isDefaultSection: true, archived: false });
-  if (existing) return existing;
   const today = todayLocal();
-  const klass: Klass = {
-    _id: newId(), courseId: course._id, code, cohort: "General section", startDate: today, endDate: addDays(today, 365),
-    schedule: "", location: "", capacity: 1000, fundingProgram: "MIXED", archived: false, instructors: [],
-    isDefaultSection: true, mergedIntoClassId: null, mergedAt: null, createdAt: new Date(),
-  };
-  try {
-    await classes.insertOne(klass);
-    return klass;
-  } catch (e) {
-    if (!isDuplicateKey(e)) throw e;
-    const again = await classes.findOne({ code });
-    if (!again) throw e;
-    return again;
+  const existing = await classes.findOne({ courseId: course._id, isDefaultSection: true, archived: false });
+  if (existing) {
+    if (existing.endDate < addDays(today, 90)) {
+      const endDate = addDays(today, 365);
+      await classes.updateOne({ _id: existing._id, endDate: existing.endDate }, { $set: { endDate } });
+      return { ...existing, endDate };
+    }
+    return existing;
   }
+  const base = `${course.name.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 24).toUpperCase() || "COURSE"}-GEN-${course._id.slice(0, 4).toUpperCase()}`;
+  for (let n = 1; n <= 20; n++) {
+    const code = n === 1 ? base : `${base}-${n}`;
+    const klass: Klass = {
+      _id: newId(), courseId: course._id, code, cohort: "General section", startDate: today, endDate: addDays(today, 365),
+      schedule: "", location: "", capacity: 1000, fundingProgram: "MIXED", archived: false, instructors: [],
+      isDefaultSection: true, mergedIntoClassId: null, mergedAt: null, createdAt: new Date(),
+    };
+    try {
+      await classes.insertOne(klass);
+      return klass;
+    } catch (e) {
+      if (!isDuplicateKey(e)) throw e;
+      // That code is taken: by an open default section created at the same moment (use it), or by an
+      // archived one or another class (try the next number).
+      const taken = await classes.findOne({ code });
+      if (taken && taken.courseId === course._id && taken.isDefaultSection && !taken.archived) return taken;
+    }
+  }
+  throw new Error(`Could not create a default section for ${course.name}`);
 }
 
 /** Picks the section an approved student joins: an open, funding-compatible section with room, else the default section. */

@@ -50,7 +50,7 @@ export default async function ReviewPage() {
             <p className="text-sm">
               Program tuition: <strong>{PRIVATE_TUITION_USD > 0 ? `$${PRIVATE_TUITION_USD.toLocaleString("en-US")}` : "as stated in your tuition agreement"}</strong>.
             </p>
-            <p className="mt-2 text-sm">Payment: <StatusBadge status={application.paymentStatus} /> <Link href="/enroll/payment" className="ml-2 text-pine-700 underline">Details</Link></p>
+            <p className="mt-2 text-sm">You don't pay now. After the office reviews your application, you'll receive a payment request by email with the amount, and you can pay online.</p>
           </Card>
         )}
 

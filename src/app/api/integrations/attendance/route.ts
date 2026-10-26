@@ -68,7 +68,10 @@ export async function POST(req: Request) {
     for (const k of ["startTime", "lunchOut", "lunchIn", "endTime"] as const) if (r[k] !== undefined) mark[k] = r[k];
     marks[r.enrollmentId] = mark;
     // Field-by-field so values the app didn't send (e.g. an instructor's note) are kept.
-    for (const [k, v] of Object.entries({ ...mark, recordedById: recorder._id, updatedAt: now })) set[`records.${r.enrollmentId}.${k}`] = v;
+    // Marked as staff-entered (source), so a student who checked in can no longer "Fill" over it.
+    for (const [k, v] of Object.entries({ ...mark, minutes: Math.round(mark.hours * 60), source: "INTEGRATION", recordedById: recorder._id, updatedAt: now })) {
+      set[`records.${r.enrollmentId}.${k}`] = v;
+    }
     if (r.studentSignature) set[`records.${r.enrollmentId}.studentSignature`] = { imageDataUrl: r.studentSignature, signedAt: now, capturedById: recorder._id };
   }
   const before = await classSessions.findOne({ classId, date }, { projection: { records: 1 } });

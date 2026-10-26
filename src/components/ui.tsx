@@ -63,6 +63,7 @@ const STATUS: Record<string, { label: string; tone: keyof typeof tones }> = {
   APPROVED: { label: "Approved", tone: "pine" },
   REJECTED: { label: "Rejected", tone: "brick" },
   PENDING: { label: "Pending", tone: "marigold" },
+  REQUESTED: { label: "Payment requested", tone: "marigold" },
   PAID: { label: "Paid", tone: "pine" },
   WAIVED: { label: "Waived", tone: "neutral" },
   ACTIVE: { label: "Active", tone: "pine" },

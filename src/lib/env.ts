@@ -19,11 +19,18 @@ const schema = z.object({
   /** Deprecated (kept so old .env files still validate). Use PRIVATE_PAYMENT_GATE. */
   PAYMENT_STAGE: z.enum(["PENDING", "DURING_ENROLLMENT", "AFTER_APPROVAL", "OFFLINE"]).default("PENDING"),
   /**
-   * When a Private student's tuition must be verified. Approval ALWAYS requires a verified (or waived)
-   * payment; this only decides how early the student is stopped:
-   * BEFORE_FORMS (default, per the Oct 2026 brief: register → pay → forms), BEFORE_SUBMIT, or BEFORE_APPROVAL.
+   * No longer used: Private students now submit first and pay after an admin's payment request.
+   * Kept so existing .env files still validate.
    */
-  PRIVATE_PAYMENT_GATE: z.enum(["BEFORE_FORMS", "BEFORE_SUBMIT", "BEFORE_APPROVAL"]).default("BEFORE_FORMS"),
+  PRIVATE_PAYMENT_GATE: z.enum(["BEFORE_FORMS", "BEFORE_SUBMIT", "BEFORE_APPROVAL"]).default("BEFORE_APPROVAL"),
+  /**
+   * Stripe (online tuition payment for Private students). Secret key from the Stripe dashboard
+   * (sk_test_... while testing, sk_live_... in production) and the signing secret of the webhook
+   * endpoint https://<your site>/api/stripe/webhook (whsec_...). Empty = online payment is off; admins
+   * can still mark payments paid offline or waived.
+   */
+  STRIPE_SECRET_KEY: z.string().optional().default("").refine((v) => v === "" || /^(sk|rk)_(test|live)_/.test(v), "STRIPE_SECRET_KEY must start with sk_test_ or sk_live_"),
+  STRIPE_WEBHOOK_SECRET: z.string().optional().default("").refine((v) => v === "" || v.startsWith("whsec_"), "STRIPE_WEBHOOK_SECRET must start with whsec_"),
   /** Shown to Private students only on the payment step (e.g. how to pay the office). Plain text. */
   PAYMENT_INSTRUCTIONS: z.string().max(2000).default(""),
   PRIVATE_TUITION_USD: z.coerce.number().min(0).default(0),
@@ -54,6 +61,9 @@ export function env(): Env {
   }
   if (parsed.data.NODE_ENV === "production" && !parsed.data.RESEND_API_KEY && !parsed.data.ALLOW_CONSOLE_EMAIL) {
     throw new Error("RESEND_API_KEY is required in production (OTP emails cannot be delivered without it).");
+  }
+  if (parsed.data.STRIPE_SECRET_KEY && !parsed.data.STRIPE_WEBHOOK_SECRET) {
+    throw new Error("STRIPE_WEBHOOK_SECRET is required when STRIPE_SECRET_KEY is set (payments are confirmed by Stripe's webhook).");
   }
   cached = parsed.data;
   return cached;

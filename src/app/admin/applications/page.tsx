@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { formatUsd } from "@/lib/payment";
 import type { Filter } from "mongodb";
 import { cols, type Application, type ApplicationStatus } from "@/db";
 import { requireAdmin } from "@/lib/auth";
@@ -9,9 +10,10 @@ import { Empty, PageHeader, StatusBadge, Table, Td, fmtDate, cx } from "@/compon
 
 export const metadata: Metadata = { title: "Applications" };
 
-const FILTERS: { key: string; label: string; statuses: ApplicationStatus[] | null; payment?: boolean }[] = [
+const FILTERS: { key: string; label: string; statuses: ApplicationStatus[] | null; payment?: "TO_REQUEST" | "REQUESTED" }[] = [
   { key: "PENDING", label: "Pending review", statuses: ["SUBMITTED", "RESUBMITTED"] },
-  { key: "PAYMENT", label: "Payment to verify", statuses: null, payment: true },
+  { key: "PAYMENT", label: "Private: payment to request", statuses: ["SUBMITTED", "RESUBMITTED"], payment: "TO_REQUEST" },
+  { key: "AWAITING_PAYMENT", label: "Private: awaiting payment", statuses: ["SUBMITTED", "RESUBMITTED"], payment: "REQUESTED" },
   { key: "CORRECTIONS_REQUESTED", label: "Resubmission required", statuses: ["CORRECTIONS_REQUESTED"] },
   { key: "APPROVED", label: "Approved", statuses: ["APPROVED"] },
   { key: "REJECTED", label: "Rejected", statuses: ["REJECTED"] },
@@ -31,7 +33,7 @@ export default async function ApplicationsPage({ searchParams }: { searchParams:
   const { applications, users, courses } = await cols();
   const where: Filter<Application> = {};
   if (filter.statuses) where.status = { $in: filter.statuses };
-  if (filter.payment) Object.assign(where, { category: "PRIVATE", paymentStatus: "PENDING" });
+  if (filter.payment) Object.assign(where, { category: "PRIVATE", paymentStatus: filter.payment === "REQUESTED" ? "REQUESTED" : "PENDING" });
   const category = CATEGORIES.find((c) => c === sp.category);
   if (category && !filter.payment) where.category = category;
   const county = COUNTIES.find((c) => c === sp.county);
@@ -94,7 +96,7 @@ export default async function ApplicationsPage({ searchParams }: { searchParams:
                 <Td>{describeEnrollment(app)}</Td>
                 <Td>{app.courseId ? courseMap.get(app.courseId)?.name ?? "-" : "-"}</Td>
                 <Td><StatusBadge status={app.status} /></Td>
-                <Td>{app.category === "PRIVATE" ? <><StatusBadge status={app.paymentStatus} />{app.paymentReportedAt && app.paymentStatus === "PENDING" && <span className="block text-xs text-marigold-700">reported</span>}</> : <span className="text-slate-400">n/a</span>}</Td>
+                <Td>{app.category === "PRIVATE" ? <><StatusBadge status={app.paymentStatus} />{app.paymentStatus === "REQUESTED" && app.paymentRequest && <span className="block text-xs text-slate-600">{formatUsd(app.paymentRequest.amountCents)}</span>}</> : <span className="text-slate-400">n/a</span>}</Td>
                 <Td>{fmtDate(app.submittedAt)}</Td>
                 <Td><Link href={`/admin/applications/${app._id}`} className="font-semibold text-pine-700 underline">Open</Link></Td>
               </tr>

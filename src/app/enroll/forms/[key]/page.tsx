@@ -21,7 +21,6 @@ export default async function FormPage({ params }: { params: Promise<{ key: stri
   const editable = editableSections(application);
   const locked = !canEdit(editable, template.key);
   const state = enrollmentState(application);
-  if (state.formsLocked) redirect("/enroll/payment");
   const current = state.forms.find((f) => f.template.key === key)!;
   const sig = application.signatures?.[key];
 

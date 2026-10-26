@@ -81,7 +81,7 @@ type FieldProps = {
   options?: string[];
   autoComplete?: string;
   maxLength?: number;
-  inputMode?: "numeric" | "text" | "email" | "tel";
+  inputMode?: "numeric" | "decimal" | "text" | "email" | "tel";
   placeholder?: string;
   rows?: number;
   readOnly?: boolean;

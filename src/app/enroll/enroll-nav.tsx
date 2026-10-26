@@ -1,7 +1,6 @@
 import Link from "next/link";
 import type { Application } from "@/db";
 import { enrollmentState } from "@/lib/enrollment";
-import { paymentSettled } from "@/lib/payment";
 import { GROUP_LABELS, type TemplateGroup } from "@/lib/forms/templates";
 import { cx } from "@/components/ui";
 
@@ -15,7 +14,6 @@ export function EnrollNav({ app, active }: { app: Application; active: string })
     { key: "overview", href: "/enroll", label: "Enrollment type", done: true },
     { key: "course", href: "/enroll/course", label: "Course", done: !!app.courseId },
   ];
-  if (app.category === "PRIVATE") items.push({ key: "payment", href: "/enroll/payment", label: "Tuition payment", done: paymentSettled(app) });
   let lastGroup: TemplateGroup | null = null;
   for (const f of s.forms) {
     const g = f.template.group;

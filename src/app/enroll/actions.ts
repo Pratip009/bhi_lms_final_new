@@ -10,7 +10,7 @@ import { audit } from "@/lib/audit";
 import { rateLimit } from "@/lib/rate-limit";
 import { putFile, deleteFile } from "@/lib/storage";
 import { detectFileType, MAX_UPLOAD_BYTES, ALLOWED_BY_DOC, safeFileName } from "@/lib/file-validation";
-import { notifyAdminsNewApplication, notifyAdminsPaymentReported, sendSubmissionReceivedEmail } from "@/lib/email";
+import { notifyAdminsNewApplication, sendSubmissionReceivedEmail } from "@/lib/email";
 import { courseServes } from "@/lib/courses";
 import { invalid, type ActionState } from "@/lib/action";
 import { coerceRaw, documentsFor, getTemplate, schemaFor, templatesFor, SECTION_CATEGORY, SECTION_COURSE, SECTION_DOCUMENTS } from "@/lib/forms/templates";
@@ -84,31 +84,7 @@ export async function setCourseAction(_: ActionState, fd: FormData): Promise<Act
   await audit(user._id, "application.set_course", "application", application._id, { courseId: course._id });
   revalidatePath("/enroll");
   const after = { ...application, courseId: course._id };
-  redirect(enrollmentState(after).formsLocked ? "/enroll/payment" : firstFormPath(after));
-}
-
-/**
- * Private only: the student reports how they paid (receipt or confirmation number). This never marks
- * the payment as paid: an admin verifies it against the office's records (setPaymentStatusAction).
- */
-export async function reportPaymentAction(_: ActionState, fd: FormData): Promise<ActionState> {
-  const { user, application } = await requireStudentStage("ENROLL");
-  if (application.category !== "PRIVATE") return { error: "Payment doesn't apply to your enrollment." };
-  if (application.paymentStatus === "PAID" || application.paymentStatus === "WAIVED") return { error: "Your payment is already verified." };
-  const ref = z.string().trim().min(3, "Enter your receipt or confirmation number").max(200).safeParse(fd.get("reference"));
-  if (!ref.success) return { fieldErrors: { reference: ref.error.issues[0].message } };
-  if (!(await rateLimit(`payment-report:${user._id}`, 10, 3600))) return { error: "Too many attempts. Try again later." };
-  const { applications, users } = await cols();
-  const res = await applications.updateOne(
-    { _id: application._id, category: "PRIVATE", paymentStatus: { $in: ["PENDING", "NOT_REQUIRED"] } },
-    { $set: { paymentStatus: "PENDING", paymentReference: ref.data, paymentReportedAt: new Date(), updatedAt: new Date() } },
-  );
-  if (!res.matchedCount) return { error: "Your application changed. Reload the page and try again." };
-  await audit(user._id, "application.payment_reported", "application", application._id);
-  const admins = await users.find({ role: "ADMIN", disabledAt: null }, { projection: { email: 1 } }).toArray();
-  await notifyAdminsPaymentReported(admins.map((a) => a.email), user.name, application._id).catch(() => undefined);
-  revalidatePath("/enroll/payment");
-  return { ok: true, message: "Thanks. The office will verify your payment and email you." };
+  redirect(firstFormPath(after));
 }
 
 function firstFormPath(app: Application) {

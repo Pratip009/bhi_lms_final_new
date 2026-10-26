@@ -23,8 +23,8 @@ export default async function AdminDashboard() {
     classes.countDocuments({ archived: false }),
     classes.countDocuments({ archived: false, "instructors.0": { $exists: false } }),
   ]);
-  const [paymentsToVerify, courseCount, coursesWithInstructor] = await Promise.all([
-    applications.countDocuments({ category: "PRIVATE", paymentStatus: "PENDING", paymentReportedAt: { $ne: null } }),
+  const [paymentsToRequest, courseCount, coursesWithInstructor] = await Promise.all([
+    applications.countDocuments({ category: "PRIVATE", status: { $in: ["SUBMITTED", "RESUBMITTED"] }, paymentStatus: "PENDING" }),
     courses.countDocuments({ archived: false }),
     courseAssignments.distinct("courseId", { removedAt: null }),
   ]);
@@ -50,7 +50,7 @@ export default async function AdminDashboard() {
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Stat label="Applications to review" value={pending} href="/admin/applications?status=PENDING" />
         <Stat label="Waiting on student corrections" value={corrections} href="/admin/applications?status=CORRECTIONS_REQUESTED" />
-        <Stat label="Tuition payments to verify" value={paymentsToVerify} href="/admin/applications?status=PAYMENT" />
+        <Stat label="Private: payment to request" value={paymentsToRequest} href="/admin/applications?status=PAYMENT" />
         <Stat label="Approved, no section yet" value={unassigned} href="/admin/students?filter=unassigned" />
         <Stat label="Active class enrollments" value={active} href="/admin/students" />
         <Stat label="Approved students" value={approvedIds.length} href="/admin/students" />

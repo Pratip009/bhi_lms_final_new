@@ -128,6 +128,15 @@ export async function resendVerificationAction(_: ActionState): Promise<ActionSt
   return { ok: true, message: `We sent a new code to ${user.email}.` };
 }
 
+/**
+ * Finds an account by the address typed. Exact match first; otherwise the same Gmail mailbox written
+ * differently (dots, +tags, googlemail.com), which registration already treats as the same account.
+ */
+async function findUserByEmail(email: string) {
+  const { users } = await cols();
+  return (await users.findOne({ email })) ?? (await users.findOne({ emailCanonical: canonicalEmail(email) }));
+}
+
 const loginSchema = z.object({ email: emailSchema, password: z.string().min(1, "Enter your password").max(128) });
 
 export async function loginAction(_: ActionState, fd: FormData): Promise<ActionState> {
@@ -136,10 +145,10 @@ export async function loginAction(_: ActionState, fd: FormData): Promise<ActionS
   const { email, password } = parsed.data;
   const { ip } = await clientMeta();
   const okIp = await rateLimit(`login-ip:${ip}`, 30, 900);
-  const okEmail = await rateLimit(`login-email:${email}`, 8, 900);
+  const okEmail = await rateLimit(`login-email:${canonicalEmail(email)}`, 8, 900);
   if (!okIp || !okEmail) return { error: "Too many sign-in attempts. Wait 15 minutes and try again." };
 
-  const user = await (await cols()).users.findOne({ email });
+  const user = await findUserByEmail(email);
   const valid = await verifyPassword(password, user?.passwordHash ?? DUMMY_HASH);
   if (!user || !valid || user.disabledAt) {
     await audit(user?._id ?? null, "user.login_failed", "user", user?._id ?? null, { email, ip });
@@ -167,7 +176,7 @@ export async function forgotPasswordAction(_: ActionState, fd: FormData): Promis
   const { ip } = await clientMeta();
   if (!(await rateLimit(`forgot-ip:${ip}`, 10, 3600))) return { error: "Too many requests. Try again later." };
 
-  const user = await (await cols()).users.findOne({ email });
+  const user = await findUserByEmail(email);
   if (user && !user.disabledAt) {
     const otp = await issueOtp(user._id, "RESET_PASSWORD");
     if (otp.ok) await sendOtpEmail(user.email, user.name, otp.code, "RESET_PASSWORD");
@@ -188,7 +197,7 @@ export async function resetPasswordAction(_: ActionState, fd: FormData): Promise
   if (!(await rateLimit(`reset-ip:${ip}`, 20, 3600))) return { error: "Too many attempts. Try again later." };
 
   const { users } = await cols();
-  const user = await users.findOne({ email });
+  const user = await findUserByEmail(email);
   if (!user) return { fieldErrors: { code: "That code isn't right or has expired." } };
   const result = await verifyOtp(user._id, "RESET_PASSWORD", code);
   if (result !== "OK") {

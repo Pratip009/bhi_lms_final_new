@@ -20,7 +20,6 @@ export default async function DocumentsPage() {
   const editable = editableSections(application);
   const locked = !canEdit(editable, SECTION_DOCUMENTS);
   const state = enrollmentState(application);
-  if (state.formsLocked) redirect("/enroll/payment");
 
   return (
     <StudentShell name={user.name} step={1} nav={<EnrollNav app={application} active="documents" />}>

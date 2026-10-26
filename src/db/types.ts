@@ -11,7 +11,33 @@ export type EnrollmentType = "PRIVATE" | "NON_PRIVATE";
 export type NonPrivateProgram = "EQISS" | "DFS";
 export type County = "HUDSON" | "BERGEN" | "SOMERSET";
 export type ApplicationStatus = "DRAFT" | "SUBMITTED" | "CORRECTIONS_REQUESTED" | "RESUBMITTED" | "APPROVED" | "REJECTED";
-export type PaymentStatus = "NOT_REQUIRED" | "PENDING" | "PAID" | "WAIVED";
+/**
+ * Private tuition. PENDING: not paid yet. REQUESTED: an admin reviewed the application and sent the
+ * student a payment request (paid online with Stripe). PAID / WAIVED: settled (online, offline or waived).
+ */
+export type PaymentStatus = "NOT_REQUIRED" | "PENDING" | "REQUESTED" | "PAID" | "WAIVED";
+
+/** One tuition payment request an admin sends a Private student after reviewing the application. */
+export type PaymentRequest = {
+  id: string;
+  amountCents: number;
+  currency: "usd";
+  /** Shown to the student with the request (e.g. what the amount covers). */
+  note: string;
+  requestedById: string;
+  requestedAt: Date;
+  status: "OPEN" | "PAID" | "CANCELLED";
+  /** The Stripe Checkout session the student is paying in (reused until it expires). */
+  checkoutSessionId?: string | null;
+  checkoutUrl?: string | null;
+  checkoutAttempts?: number;
+  paidAt?: Date | null;
+  amountPaidCents?: number | null;
+  stripePaymentIntentId?: string | null;
+  cancelledAt?: Date | null;
+  cancelledById?: string | null;
+  cancelReason?: string | null;
+};
 export type EnrollmentStatus = "ACTIVE" | "COMPLETED" | "WITHDRAWN" | "TRANSFERRED";
 export type AttendanceStatus = "PRESENT" | "ABSENT" | "LATE" | "EXCUSED" | "HOLIDAY";
 export type ReportStatus = "DRAFT" | "SUBMITTED";
@@ -92,6 +118,9 @@ export type Application = {
   paymentStatus: PaymentStatus;
   /** Private only: what the student reported paying (receipt / confirmation number). Verified by an admin. */
   paymentReference?: string | null;
+  /** The current tuition request (Private only). Earlier ones move to paymentRequestHistory. */
+  paymentRequest?: PaymentRequest | null;
+  paymentRequestHistory?: PaymentRequest[];
   paymentReportedAt?: Date | null;
   paymentVerifiedAt?: Date | null;
   paymentVerifiedById?: string | null;

@@ -145,9 +145,10 @@ export async function sendSubmissionReceivedEmail(to: string, name: string, resu
 }
 
 export async function sendPaymentVerifiedEmail(to: string, name: string, status: "PAID" | "WAIVED") {
-  const html = layout("Your tuition payment is verified", `<p>Hi ${escapeHtml(name)},</p><p>The BHI office has ${status === "PAID" ? "verified your tuition payment" : "waived your tuition payment"}. You can continue your enrollment.</p>
-     <p><a href="${link("/enroll")}" style="display:inline-block;background:#1F4E46;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none">Continue enrollment</a></p>`);
-  await send(to, "Tuition payment verified", html, `Your tuition payment is verified. Continue: ${link("/enroll")}`);
+  const what = status === "PAID" ? "recorded your tuition payment" : "waived your tuition payment";
+  const html = layout("Your tuition payment is settled", `<p>Hi ${escapeHtml(name)},</p><p>The BHI office has ${what}. We'll email you when your enrollment is approved.</p>
+     <p><a href="${link("/application")}" style="display:inline-block;background:#1F4E46;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none">See my application</a></p>`);
+  await send(to, "Tuition payment settled", html, `The BHI office has ${what}. Your application: ${link("/application")}`);
 }
 
 export async function notifyAdminsPaymentReported(adminEmails: string[], studentName: string, applicationId: string) {
@@ -178,4 +179,36 @@ export async function sendClassroomLinkEmail(to: string, name: string, className
      <p style="font-size:13px;color:#5B6670">Sign in with the Gmail address you registered with. The link is also on your dashboard.</p>`,
   );
   await send(to, `Google Classroom: ${className}`, html, `${instructorName} shared the online classroom for ${className}: ${url}\nThe link is also on your dashboard: ${link("/dashboard")}`);
+}
+
+// ---------- Online tuition payment (Stripe) ----------
+
+export async function sendPaymentRequestEmail(to: string, name: string, amount: string, courseName: string, note: string) {
+  const html = layout(
+    "Your tuition payment request",
+    `<p>Hi ${escapeHtml(name)},</p><p>The BHI office reviewed your application for <strong>${escapeHtml(courseName)}</strong>.
+     To complete your enrollment, please pay your tuition of <strong>${escapeHtml(amount)}</strong>.</p>
+     ${note ? `<p style="background:#F4F7F6;border-radius:6px;padding:12px;white-space:pre-wrap">${escapeHtml(note)}</p>` : ""}
+     <p><a href="${link("/application")}" style="display:inline-block;background:#1F4E46;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none">Pay my tuition</a></p>
+     <p style="font-size:13px;color:#5B6670">You pay on Stripe's secure page. As soon as the payment goes through, you're enrolled and your dashboard opens.</p>`,
+  );
+  await send(to, `Tuition payment request: ${amount}`, html,
+    `Hi ${name},\nThe BHI office reviewed your application for ${courseName}. Please pay your tuition of ${amount}.\n${note ? `${note}\n` : ""}Pay here: ${link("/application")}`);
+}
+
+export async function sendPaymentReceivedEmail(to: string, name: string, amount: string, courseName: string) {
+  const html = layout(
+    "Payment received",
+    `<p>Hi ${escapeHtml(name)},</p><p>We received your tuition payment of <strong>${escapeHtml(amount)}</strong> for <strong>${escapeHtml(courseName)}</strong>. Thank you.</p>
+     <p>Stripe also emails you a receipt.</p>
+     <p><a href="${link("/dashboard")}" style="display:inline-block;background:#1F4E46;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none">Open my dashboard</a></p>`,
+  );
+  await send(to, `Payment received: ${amount}`, html, `We received your tuition payment of ${amount} for ${courseName}. Your dashboard: ${link("/dashboard")}`);
+}
+
+export async function notifyAdminsPayment(adminEmails: string[], studentName: string, applicationId: string, headline: string, detail: string) {
+  if (!adminEmails.length) return;
+  const url = link(`/admin/applications/${applicationId}`);
+  const html = layout(headline, `<p><strong>${escapeHtml(studentName)}</strong>: ${escapeHtml(detail)}</p><p><a href="${url}">Open the application</a></p>`);
+  await Promise.all(adminEmails.map((to) => send(to, `${headline}: ${studentName}`, html, `${studentName}: ${detail}\n${url}`).catch(() => undefined)));
 }

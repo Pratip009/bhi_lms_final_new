@@ -3,9 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { cols, newId, isDuplicateKey, type Category, type ApplicationStatus, type User } from "@/db";
-import { enrollInCourse, moveEnrollment, fundingFits } from "@/lib/placement";
-import { approvalBlockedByPayment } from "@/lib/payment";
+import { cols, newId, isDuplicateKey, type Category, type User } from "@/db";
+import { moveEnrollment, fundingFits } from "@/lib/placement";
+import { formatUsd, parseUsdToCents } from "@/lib/payment";
+import { approveApplication, REVIEWABLE } from "@/lib/approval";
+import { closeCheckout, settleCheckoutSession, stripe, stripeEnabled } from "@/lib/tuition";
 import { courseServes } from "@/lib/courses";
 import { clientMeta } from "@/lib/session";
 import { requireAdmin } from "@/lib/auth";
@@ -15,7 +17,7 @@ import { invalid, formObject, type ActionState } from "@/lib/action";
 import { ALL_SECTIONS, answersHash, enrollmentState, selectionUpdate, validateSelection } from "@/lib/enrollment";
 import {
   sendClassAssignedEmail, sendCorrectionsEmail, sendDecisionEmail, sendInstructorClassEmail, sendInstructorCoursesEmail, sendInstructorDecisionEmail,
-  sendInstructorInviteEmail, sendPaymentVerifiedEmail, trySend,
+  sendInstructorInviteEmail, sendPaymentRequestEmail, sendPaymentVerifiedEmail, trySend,
 } from "@/lib/email";
 import { deleteFile } from "@/lib/storage";
 import { INVITE_TTL_DAYS, newInviteToken } from "@/lib/invite";
@@ -25,7 +27,6 @@ import { hashPassword } from "@/lib/password";
 import { CATEGORY_LABELS, coerceRaw, getTemplate, schemaFor, sectionLabel } from "@/lib/forms/templates";
 
 const uuid = z.string().uuid();
-const REVIEWABLE: ApplicationStatus[] = ["SUBMITTED", "RESUBMITTED"];
 
 async function loadApp(id: string) {
   const { applications, users } = await cols();
@@ -40,43 +41,13 @@ async function loadApp(id: string) {
 
 /**
  * Approval enrolls the student in the course they chose (an open section, or the course's default
- * section). Private applications need a verified or waived tuition payment first.
+ * section). Private applications need a settled payment first (paid online, paid offline or waived).
  */
 export async function approveApplicationAction(applicationId: string, _: ActionState): Promise<ActionState> {
   const admin = await requireAdmin();
-  const row = await loadApp(applicationId);
-  if (!row) return { error: "Application not found." };
-  const { app, student } = row;
-  if (approvalBlockedByPayment(app)) return { error: "Tuition payment isn't verified yet. Mark it paid (or waived) before approving this Private application." };
-  if (student.disabledAt) return { error: "This student's account is disabled. Re-enable it first." };
-  const { applications, courses } = await cols();
-  const course = app.courseId ? await courses.findOne({ _id: app.courseId }) : null;
-  if (!course || course.archived) return { error: "The student hasn't chosen an available course. Edit the application's course first." };
-  if (!courseServes(course, app.category)) return { error: `${course.name} isn't offered to ${app.category ? CATEGORY_LABELS[app.category] : "this program"}. Change the course first.` };
-
-  const res = await applications.updateOne(
-    { _id: applicationId, status: { $in: REVIEWABLE } },
-    { $set: { status: "APPROVED", decidedAt: new Date(), decidedById: admin._id, rejectionReason: null, updatedAt: new Date() } },
-  );
-  if (!res.modifiedCount) return { error: "Only pending applications can be approved. Reload to see the latest status." };
-  await audit(admin._id, "application.approve", "application", applicationId, { courseId: course._id });
-
-  let placed;
-  try {
-    placed = await enrollInCourse(app.studentId, course, app.category, admin._id);
-  } catch (e) {
-    console.error("[approve] placement failed", e);
-    revalidatePath("/admin", "layout");
-    return { error: `Approved, but the student couldn't be placed in ${course.name}. Assign a section from the student's page.` };
-  }
-  await audit(admin._id, "enrollment.assign", "class", placed.klass._id, { studentId: app.studentId, via: "approval", courseId: course._id });
-  const emailed = await trySend(() => sendDecisionEmail(student.email, student.name, "APPROVED", undefined, course.name));
+  const r = await approveApplication(applicationId, admin._id, "admin");
   revalidatePath("/admin", "layout");
-  return {
-    ok: true,
-    message: `Approved and enrolled in ${course.name} (${placed.klass.code}${placed.klass.isDefaultSection ? ", default section" : ""}). ` +
-      (emailed ? "The student was emailed." : "The approval email could not be sent; let the student know directly."),
-  };
+  return r.ok ? { ok: true, message: r.message } : { error: r.error };
 }
 
 export async function rejectApplicationAction(applicationId: string, _: ActionState, fd: FormData): Promise<ActionState> {
@@ -92,6 +63,8 @@ export async function rejectApplicationAction(applicationId: string, _: ActionSt
   );
   if (!res.modifiedCount) return { error: "This application can't be rejected in its current status." };
   await audit(admin._id, "application.reject", "application", applicationId, { reason: reason.data });
+  // An open payment request can no longer be paid once the application is rejected.
+  if (row.app.paymentRequest?.status === "OPEN") await cancelRequest(row.app._id, row.app.paymentRequest.id, admin._id, "application rejected");
   const emailed = await trySend(() => sendDecisionEmail(row.student.email, row.student.name, "REJECTED", reason.data));
   revalidatePath("/admin", "layout");
   return { ok: true, message: emailed ? "Application rejected and the student was emailed." : "Application rejected. The email could not be sent; contact the student directly." };
@@ -143,9 +116,93 @@ export async function reopenApplicationAction(applicationId: string, _: ActionSt
 }
 
 // ---------- Private tuition payment ----------
-// Recorded by admins (payment itself happens offline until PAYMENT_STAGE is decided).
-// Only PRIVATE applications match the filter, so a funded student can never get a payment state.
+// Private students submit without paying. After reviewing, an admin sends a payment request with the
+// amount; the student pays online (Stripe) and is then approved automatically. Admins can also record
+// an offline payment or waive it. Only PRIVATE applications match, so a funded student never gets one.
 
+/** Marks a request cancelled (if it is still the current, open one) and stops its Stripe page. */
+async function cancelRequest(applicationId: string, requestId: string, byId: string, reason: string): Promise<"CANCELLED" | "PAID" | "GONE"> {
+  const { applications } = await cols();
+  const app = await applications.findOne({ _id: applicationId, "paymentRequest.id": requestId });
+  if (!app?.paymentRequest || app.paymentRequest.status !== "OPEN") return "GONE";
+  // If the student already paid on the Stripe page, record the payment instead of cancelling it.
+  if ((await closeCheckout(app.paymentRequest.checkoutSessionId)) === "PAID") {
+    await settleCheckoutSession(await stripe().checkout.sessions.retrieve(app.paymentRequest.checkoutSessionId!), "return");
+    return "PAID";
+  }
+  await applications.updateOne(
+    { _id: applicationId, "paymentRequest.id": requestId, "paymentRequest.status": "OPEN" },
+    {
+      $set: {
+        "paymentRequest.status": "CANCELLED", "paymentRequest.cancelledAt": new Date(), "paymentRequest.cancelledById": byId,
+        "paymentRequest.cancelReason": reason, paymentStatus: "PENDING", updatedAt: new Date(),
+      },
+    },
+  );
+  return "CANCELLED";
+}
+
+/**
+ * Admin, after reviewing a Private application: asks the student to pay `amount` online. The student
+ * is emailed and sees the request on their status page. Sending a new amount replaces the open request.
+ */
+export async function requestPaymentAction(applicationId: string, _: ActionState, fd: FormData): Promise<ActionState> {
+  const admin = await requireAdmin();
+  if (!stripeEnabled()) return { error: "Online payment isn't set up yet (STRIPE_SECRET_KEY). Record the payment offline, or set up Stripe first." };
+  const cents = parseUsdToCents(String(fd.get("amount") ?? ""));
+  if (cents === null) return { fieldErrors: { amount: "Enter an amount in dollars between $0.50 and $50,000, e.g. 1500 or 1500.00" } };
+  const note = z.string().trim().max(500).safeParse(fd.get("note") ?? "");
+  if (!note.success) return { fieldErrors: { note: "500 characters at most" } };
+  const row = await loadApp(applicationId);
+  if (!row) return { error: "Application not found." };
+  const { app, student } = row;
+  if (app.category !== "PRIVATE") return { error: "Payment requests are for Private applications only." };
+  if (!REVIEWABLE.includes(app.status)) return { error: "Send a payment request while the application is waiting for review." };
+  if (app.paymentStatus === "PAID" || app.paymentStatus === "WAIVED") return { error: "Tuition is already settled for this application." };
+  if (student.disabledAt) return { error: "This student's account is disabled. Re-enable it first." };
+
+  // Replacing an open request: its payment page stops working first (unless the student just paid in it).
+  const previous = app.paymentRequest?.status === "OPEN" ? app.paymentRequest : null;
+  if (previous && (await cancelRequest(app._id, previous.id, admin._id, "replaced by a new request")) === "PAID") {
+    revalidatePath("/admin", "layout");
+    return { error: "The student had just paid the earlier request. The payment was recorded; check the application." };
+  }
+  const { applications, courses } = await cols();
+  const fresh = await applications.findOne({ _id: app._id });
+  const now = new Date();
+  const request = {
+    id: newId(), amountCents: cents, currency: "usd" as const, note: note.data, requestedById: admin._id, requestedAt: now,
+    status: "OPEN" as const, checkoutSessionId: null, checkoutUrl: null, checkoutAttempts: 0,
+  };
+  const res = await applications.updateOne(
+    { _id: app._id, category: "PRIVATE", status: { $in: REVIEWABLE }, paymentStatus: { $nin: ["PAID", "WAIVED"] }, updatedAt: fresh?.updatedAt },
+    {
+      $set: { paymentRequest: request, paymentStatus: "REQUESTED", updatedAt: now },
+      ...(fresh?.paymentRequest ? { $push: { paymentRequestHistory: fresh.paymentRequest } } : {}),
+    },
+  );
+  if (!res.modifiedCount) return { error: "The application changed meanwhile. Reload and try again." };
+  await audit(admin._id, "application.payment_requested", "application", app._id, { amountCents: cents, requestId: request.id, replaced: previous?.id ?? null });
+  const course = app.courseId ? await courses.findOne({ _id: app.courseId }, { projection: { name: 1 } }) : null;
+  const emailed = await trySend(() => sendPaymentRequestEmail(student.email, student.name, formatUsd(cents), course?.name ?? "your course", note.data));
+  revalidatePath("/admin", "layout");
+  return { ok: true, message: `Payment request for ${formatUsd(cents)} sent.${emailed ? " The student was emailed." : " The email could not be sent; the student still sees it when signing in."}` };
+}
+
+/** Admin: withdraws the open payment request (the student's payment page stops working). */
+export async function cancelPaymentRequestAction(applicationId: string, _: ActionState): Promise<ActionState> {
+  const admin = await requireAdmin();
+  const { applications } = await cols();
+  const app = await applications.findOne({ _id: applicationId }, { projection: { paymentRequest: 1 } });
+  if (app?.paymentRequest?.status !== "OPEN") return { error: "There is no open payment request." };
+  const r = await cancelRequest(applicationId, app.paymentRequest.id, admin._id, "cancelled by admin");
+  await audit(admin._id, "application.payment_request_cancelled", "application", applicationId, { requestId: app.paymentRequest.id, result: r });
+  revalidatePath("/admin", "layout");
+  if (r === "PAID") return { error: "The student had already paid, so the payment was recorded instead." };
+  return { ok: true, message: "Payment request cancelled." };
+}
+
+/** Admin records a payment made offline (cash, check, bank transfer) or waives it, or resets it to unpaid. */
 export async function setPaymentStatusAction(applicationId: string, _: ActionState, fd: FormData): Promise<ActionState> {
   const admin = await requireAdmin();
   const status = z.enum(["PENDING", "PAID", "WAIVED"]).safeParse(fd.get("paymentStatus"));
@@ -153,12 +210,29 @@ export async function setPaymentStatusAction(applicationId: string, _: ActionSta
   const reference = z.string().trim().max(200).safeParse(fd.get("reference") ?? "");
   const settled = status.data !== "PENDING";
   const { applications } = await cols();
-  const before = await applications.findOne({ _id: applicationId, category: "PRIVATE" }, { projection: { paymentStatus: 1, studentId: 1 } });
+  const before = await applications.findOne({ _id: applicationId, category: "PRIVATE" }, { projection: { paymentStatus: 1, studentId: 1, paymentRequest: 1 } });
+  if (!before) return { error: "Payment applies to Private applications only." };
+  if (before.paymentRequest?.status === "PAID" && status.data !== "PAID") {
+    return { error: "This tuition was paid online. Refund it in Stripe first if it must be undone." };
+  }
+  // An open online request is closed first, so the student can't also pay online.
+  if (before.paymentRequest?.status === "OPEN") {
+    const r = await cancelRequest(applicationId, before.paymentRequest.id, admin._id, `settled offline (${status.data.toLowerCase()})`);
+    if (r === "PAID") {
+      revalidatePath("/admin", "layout");
+      return { error: "The student had just paid online, so that payment was recorded instead." };
+    }
+  }
   const res = await applications.updateOne(
     { _id: applicationId, category: "PRIVATE" },
-    { $set: { paymentStatus: status.data, paymentVerifiedAt: settled ? new Date() : null, paymentVerifiedById: settled ? admin._id : null, updatedAt: new Date() } },
+    {
+      $set: {
+        paymentStatus: status.data, paymentVerifiedAt: settled ? new Date() : null, paymentVerifiedById: settled ? admin._id : null,
+        ...(settled && reference.success && reference.data ? { paymentReference: reference.data } : {}), updatedAt: new Date(),
+      },
+    },
   );
-  if (!res.matchedCount || !before) return { error: "Payment applies to Private applications only." };
+  if (!res.matchedCount) return { error: "Payment applies to Private applications only." };
   await audit(admin._id, "application.payment_status", "application", applicationId, {
     from: before.paymentStatus, status: status.data, reference: reference.success ? reference.data : "",
   });
@@ -698,22 +772,29 @@ export async function mergeSectionsAction(targetClassId: string, _: ActionState,
   }
   let moved = 0;
   const skipped: string[] = [];
+  const kept: string[] = [];
   for (const k of list) {
     const active = await enrollments.find({ classId: k._id, status: "ACTIVE" }).toArray();
     for (const e of active) {
       const r = await moveEnrollment(e, target, admin._id, `merged into ${target.code}`);
       if (r.ok) moved++; else skipped.push(e.studentId);
     }
+    // Only archive a section once nobody is left active in it; otherwise those students would be
+    // stuck in a hidden class where no attendance can be taken.
+    if (await enrollments.countDocuments({ classId: k._id, status: "ACTIVE" }, { limit: 1 })) {
+      kept.push(k.code);
+      continue;
+    }
     await classes.updateOne({ _id: k._id }, { $set: { archived: true, mergedIntoClassId: target._id, mergedAt: new Date() } });
   }
-  await audit(admin._id, "class.merge", "class", target._id, { sources, moved, skipped });
+  await audit(admin._id, "class.merge", "class", target._id, { sources, moved, skipped, keptOpen: kept });
   revalidatePath("/admin", "layout");
   revalidatePath("/instructor", "layout");
-  return {
-    ok: true,
-    message: `Merged ${list.length} section${list.length === 1 ? "" : "s"} into ${target.code}: ${moved} student${moved === 1 ? "" : "s"} moved. ` +
-      "The merged sections are archived with their attendance, reports and instructors kept.",
-  };
+  const base = `${moved} student${moved === 1 ? "" : "s"} moved into ${target.code}.`;
+  if (kept.length) {
+    return { error: `${base} ${kept.join(", ")} still ${kept.length === 1 ? "has" : "have"} students who couldn't be moved, so ${kept.length === 1 ? "it was" : "they were"} left open. Move those students from the class page, then merge again.` };
+  }
+  return { ok: true, message: `${base} The merged section${list.length === 1 ? " is" : "s are"} archived with attendance, reports and instructors kept.` };
 }
 
 /** Course page: pick an instructor for this course. Same rules as assigning from the instructor's page. */

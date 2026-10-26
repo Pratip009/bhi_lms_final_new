@@ -226,3 +226,15 @@ export function AssignCourseForm({ action, courses }: { action: Act; courses: { 
     </ActionForm>
   );
 }
+
+/** Admin: send a Private student a tuition payment request (amount in dollars + optional note). */
+export function PaymentRequestForm({ action, defaultAmount, replacing }: { action: Act; defaultAmount?: string; replacing: boolean }) {
+  return (
+    <ActionForm action={action} className="space-y-3"
+      confirm={replacing ? "Replace the open request? The student's current payment page stops working." : "Send this payment request to the student by email?"}>
+      <Field name="amount" label="Amount (USD)" inputMode="decimal" placeholder="1500.00" defaultValue={defaultAmount} required help="Dollars, e.g. 1500 or 1500.00" />
+      <Field name="note" label="Note to the student (optional)" type="textarea" rows={2} maxLength={500} />
+      <Submit>{replacing ? "Send new amount" : "Request payment"}</Submit>
+    </ActionForm>
+  );
+}

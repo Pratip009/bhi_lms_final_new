@@ -21,7 +21,6 @@ export default async function EnrollPage() {
   const course = application.courseId ? await (await cols()).courses.findOne({ _id: application.courseId }, { projection: { name: 1 } }) : null;
   const next = !state ? null
     : !application.courseId ? "/enroll/course"
-    : state.formsLocked ? "/enroll/payment"
     : firstOpen ? `/enroll/forms/${firstOpen.template.key}`
     : state.ready ? "/enroll/review" : "/enroll/documents";
 
