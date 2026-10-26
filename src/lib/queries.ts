@@ -1,8 +1,8 @@
 import "server-only";
 import { CATEGORY_LABELS } from "@/lib/forms/templates";
 import { cols, type Klass, type Course, type User, type Enrollment, type AttendanceStatus } from "@/db";
-import { todayLocal, timeLocal } from "@/lib/dates";
-import { isOpen, unconfirmed } from "@/lib/checkin";
+import { todayLocal } from "@/lib/dates";
+import { isPendingFill } from "@/lib/attendance-math";
 
 type PublicUser = Pick<User, "_id" | "name" | "email">;
 const publicUser = { projection: { _id: 1, name: 1, email: 1 } } as const;
@@ -130,41 +130,21 @@ export async function searchAttendance(q: AttendanceSearch) {
 }
 
 /**
- * Class days where students checked in but the instructor's saved sheet doesn't count them yet
- * (never saved, or saved as absent). Looks back 60 days. Pass classIds to limit to some classes.
+ * Class days (last 60) that still need the instructor: students who checked in but haven't filled out
+ * the day, or a day with marks that isn't signed yet.
  */
-export async function unconfirmedCheckIns(classIds?: string[]) {
-  const { checkIns, classSessions, enrollments } = await cols();
+export async function attendanceToDo(classIds?: string[]) {
+  const { classSessions } = await cols();
+  const today = todayLocal();
   const since = todayLocal(new Date(Date.now() - 60 * 86_400_000));
-  const filter = { date: { $gte: since }, ...(classIds ? { classId: { $in: classIds } } : {}) };
-  const list = (await checkIns.find(filter, { projection: { classId: 1, date: 1, entries: 1 } }).toArray()).filter((c) => Object.keys(c.entries).length);
-  if (!list.length) return [];
-  const sessions = await classSessions.find({ $or: list.map((c) => ({ classId: c.classId, date: c.date })) }, { projection: { classId: 1, date: 1, records: 1 } }).toArray();
-  // Ignore check-ins of students who have since left the class: there's nothing left to confirm.
-  const activeIds = new Set((await enrollments.find({ classId: { $in: [...new Set(list.map((c) => c.classId))] }, status: "ACTIVE" }, { projection: { _id: 1 } }).toArray()).map((e) => e._id));
-  return list
-    .map((c) => {
-      const records = sessions.find((s) => s.classId === c.classId && s.date === c.date)?.records;
-      return { classId: c.classId, date: c.date, count: unconfirmed(c.entries, records).filter((e) => activeIds.has(e)).length };
+  const days = await classSessions
+    .find({ date: { $gte: since, $lte: today }, ...(classIds ? { classId: { $in: classIds } } : {}) }, { projection: { classId: 1, date: 1, records: 1, signoff: 1 } })
+    .toArray();
+  return days
+    .map((d) => {
+      const recs = Object.values(d.records ?? {});
+      return { classId: d.classId, date: d.date, pending: recs.filter((r) => isPendingFill(r)).length, unsigned: recs.length > 0 && !d.signoff };
     })
-    .filter((x) => x.count > 0)
+    .filter((x) => x.pending > 0 || x.unsigned)
     .sort((a, b) => b.date.localeCompare(a.date));
-}
-
-/** Today's check-in state for each of a student's active enrollments, keyed by class id. */
-export async function studentCheckIns(studentId: string) {
-  const { enrollments, checkIns } = await cols();
-  const mine = await enrollments.find({ studentId, status: "ACTIVE" }, { projection: { _id: 1, classId: 1 } }).toArray();
-  const sessions = await checkIns.find({ classId: { $in: mine.map((e) => e.classId) }, date: todayLocal() }).toArray();
-  const now = new Date();
-  const out = new Map<string, { open: boolean; checkedIn: { time: string; late: boolean } | null }>();
-  for (const e of mine) {
-    const s = sessions.find((x) => x.classId === e.classId);
-    const entry = s?.entries[e._id];
-    out.set(e.classId, {
-      open: !!s && isOpen(s, now),
-      checkedIn: entry ? { time: timeLocal(entry.at), late: entry.status === "LATE" } : null,
-    });
-  }
-  return out;
 }

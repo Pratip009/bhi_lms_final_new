@@ -169,3 +169,13 @@ export async function sendInstructorCoursesEmail(to: string, name: string, cours
      <p><a href="${link("/instructor")}" style="display:inline-block;background:#1F4E46;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none">Open my courses</a></p>`);
   await send(to, `New course: ${courseName}`, html, `You're an instructor for ${courseName}. ${link("/instructor")}`);
 }
+
+export async function sendClassroomLinkEmail(to: string, name: string, className: string, url: string, instructorName: string) {
+  const html = layout(
+    "Your Google Classroom link",
+    `<p>Hi ${escapeHtml(name)},</p><p>${escapeHtml(instructorName)} shared the online classroom for <strong>${escapeHtml(className)}</strong>.</p>
+     <p><a href="${escapeHtml(url)}" style="display:inline-block;background:#1F4E46;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none">Open Google Classroom</a></p>
+     <p style="font-size:13px;color:#5B6670">Sign in with the Gmail address you registered with. The link is also on your dashboard.</p>`,
+  );
+  await send(to, `Google Classroom: ${className}`, html, `${instructorName} shared the online classroom for ${className}: ${url}\nThe link is also on your dashboard: ${link("/dashboard")}`);
+}

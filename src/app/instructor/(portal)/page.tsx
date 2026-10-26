@@ -5,7 +5,7 @@ import { requireInstructor } from "@/lib/auth";
 import { activeCourseIds, instructorClassFilter } from "@/lib/authz";
 import { describeEnrollment } from "@/lib/forms/templates";
 import { thisMonthLocal } from "@/lib/dates";
-import { coursesById, unconfirmedCheckIns, usersById } from "@/lib/queries";
+import { attendanceToDo, coursesById, usersById } from "@/lib/queries";
 import { Alert, Badge, Card, Empty, PageHeader, Table, Td, fmtDate } from "@/components/ui";
 
 export const metadata: Metadata = { title: "My courses" };
@@ -24,7 +24,7 @@ export default async function InstructorHome({ searchParams }: { searchParams: P
   const apps = new Map((await applications.find({ studentId: { $in: roster.map((e) => e.studentId) } }, { projection: { studentId: 1, category: 1, county: 1 } }).toArray()).map((a) => [a.studentId, a]));
   const month = thisMonthLocal();
   const reports = await progressReports.find({ enrollmentId: { $in: roster.map((e) => e._id) }, month }, { projection: { enrollmentId: 1, status: 1 } }).toArray();
-  const toConfirm = await unconfirmedCheckIns(ks.map((k) => k._id));
+  const toConfirm = await attendanceToDo(ks.map((k) => k._id));
   const codeOf = new Map(ks.map((k) => [k._id, k.code]));
 
   return (
@@ -32,11 +32,11 @@ export default async function InstructorHome({ searchParams }: { searchParams: P
       <PageHeader title="My courses" description="Your assigned courses and students. Open a student's attendance sheet or monthly progress report." />
       {toConfirm.length > 0 && (
         <div className="mb-5"><Alert tone="warning">
-          <p className="font-semibold">Check-ins waiting for you to confirm attendance</p>
+          <p className="font-semibold">Attendance waiting for you (fill-outs to complete or days to sign)</p>
           <ul className="mt-1 list-disc pl-5">
             {toConfirm.map((t) => (
               <li key={`${t.classId}:${t.date}`}>
-                <Link href={`/instructor/classes/${t.classId}/attendance?date=${t.date}`} className="underline">{codeOf.get(t.classId)}, {fmtDate(t.date)}</Link>: {t.count} student{t.count === 1 ? "" : "s"}
+                <Link href={`/instructor/classes/${t.classId}/attendance?date=${t.date}`} className="underline">{codeOf.get(t.classId)}, {fmtDate(t.date)}</Link>: {[t.pending ? `${t.pending} checked in, not filled out` : "", t.unsigned ? "not signed" : ""].filter(Boolean).join("; ")}
               </li>
             ))}
           </ul>

@@ -5,7 +5,7 @@ import { requireAdmin } from "@/lib/auth";
 import { describeEnrollment, pendingTemplates } from "@/lib/forms/templates";
 import { eqissTextPending } from "@/lib/eqiss-text";
 import { Alert } from "@/components/ui";
-import { unconfirmedCheckIns, usersById } from "@/lib/queries";
+import { attendanceToDo, usersById } from "@/lib/queries";
 import { Card, Empty, PageHeader, Stat, StatusBadge, fmtDate } from "@/components/ui";
 
 export const metadata: Metadata = { title: "Admin dashboard" };
@@ -32,7 +32,7 @@ export default async function AdminDashboard() {
   const unassigned = approvedIds.filter((id) => !assigned.has(id)).length;
   const queue = await applications.find({ status: { $in: ["SUBMITTED", "RESUBMITTED"] } }).sort({ submittedAt: 1 }).limit(8).toArray();
   const names = await usersById(queue.map((a) => a.studentId));
-  const toConfirm = await unconfirmedCheckIns();
+  const toConfirm = await attendanceToDo();
   const confirmClasses = new Map((await classes.find({ _id: { $in: toConfirm.map((t) => t.classId) } }, { projection: { code: 1 } }).toArray()).map((k) => [k._id, k.code]));
 
   return (
@@ -61,12 +61,12 @@ export default async function AdminDashboard() {
       </div>
       {toConfirm.length > 0 && (
         <div className="mt-8">
-          <Card title={`Check-ins not yet confirmed by instructors (${toConfirm.length} class day${toConfirm.length === 1 ? "" : "s"})`}>
+          <Card title={`Class days not completed or signed by instructors (${toConfirm.length})`} actions={<Link href="/admin/live" className="text-sm font-semibold text-pine-700 underline">Live attendance</Link>}>
             <ul className="divide-y divide-line text-sm">
               {toConfirm.slice(0, 10).map((t) => (
                 <li key={`${t.classId}:${t.date}`} className="flex justify-between gap-3 py-2">
                   <Link href={`/admin/classes/${t.classId}`} className="font-semibold text-pine-700 underline">{confirmClasses.get(t.classId) ?? "Class"}</Link>
-                  <span>{fmtDate(t.date)}: {t.count} student{t.count === 1 ? "" : "s"} checked in but not counted</span>
+                  <span>{fmtDate(t.date)}: {[t.pending ? `${t.pending} not filled out` : "", t.unsigned ? "not signed" : ""].filter(Boolean).join(", ")}</span>
                 </li>
               ))}
             </ul>

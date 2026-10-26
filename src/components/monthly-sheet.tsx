@@ -3,6 +3,7 @@ import type { loadMonthlySheet } from "@/lib/sheets";
 import { saveDailyEntryAction, signMonthlySheetAction } from "@/lib/actions/sheets";
 import { ATTENDANCE_LABEL } from "@/lib/queries";
 import { Alert, Badge, Card, cx } from "./ui";
+import { timeLocal } from "@/lib/dates";
 import { DailyEntryEditor } from "./daily-entry-editor";
 import { PrintButton, SignForm } from "./sign-form";
 
@@ -56,7 +57,8 @@ export function MonthlySheet({ sheet, enrollmentId, month, months, basePath, mod
                     <td className="border border-line px-2 py-2">{r && <Badge tone={tone[r.status]}>{ATTENDANCE_LABEL[r.status]}</Badge>}</td>
                     <td className="border border-line px-2 py-2">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      {r?.studentSignature ? <img src={r.studentSignature.imageDataUrl} alt={`Signature of ${studentName} for ${date}`} className="h-8 max-w-[140px]" /> : ""}
+                      {r?.studentSignature ? <img src={r.studentSignature.imageDataUrl} alt={`Signature of ${studentName} for ${date}`} className="h-8 max-w-[140px]" />
+                        : r?.studentFilledAt ? <span className="text-xs text-pine-800">Confirmed by student (Fill) {timeLocal(r.studentFilledAt)}</span> : ""}
                     </td>
                     <td className="border border-line px-2 py-2 text-slate-600">{r?.note || ""}</td>
                     <td className="border border-line px-2 py-2 print:hidden">

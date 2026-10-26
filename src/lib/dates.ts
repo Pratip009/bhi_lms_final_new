@@ -18,3 +18,8 @@ export const localDateOf = (d: Date) => todayLocal(d);
 export function timeLocal(d: Date): string {
   return new Intl.DateTimeFormat("en-US", { timeZone: APP_TIMEZONE, hour: "numeric", minute: "2-digit" }).format(d);
 }
+
+/** "9:05:12 AM" in the office time zone, to the second (check-in and fill-out times). */
+export function timeLocalExact(d: Date): string {
+  return new Intl.DateTimeFormat("en-US", { timeZone: APP_TIMEZONE, hour: "numeric", minute: "2-digit", second: "2-digit" }).format(d);
+}

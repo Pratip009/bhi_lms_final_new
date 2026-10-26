@@ -130,6 +130,17 @@ export type Klass = {
   mergedAt?: Date | null;
   /** Created automatically on approval when a course had no open section. */
   isDefaultSection?: boolean;
+  /** Google Classroom (or other online class) link the instructor shares with the students. */
+  classroomUrl?: string | null;
+  classroomSentAt?: Date | null;
+  /**
+   * Daily schedule (HH:MM, office time zone). Optional, but when set, filled-out hours are counted
+   * only inside class time and the break is deducted, so hours can't be over-counted.
+   */
+  sessionStart?: string | null;
+  sessionEnd?: string | null;
+  breakStart?: string | null;
+  breakEnd?: string | null;
   createdAt: Date;
 };
 
@@ -162,6 +173,13 @@ export type Enrollment = {
 
 export type HandSignature = { imageDataUrl: string; signedAt: Date; capturedById?: string | null };
 /**
+ * How a day's mark was made.
+ * CHECKIN: the student checked in and hasn't filled out the day yet (no time out, 0 hours).
+ * STUDENT_FILL: the student pressed "Fill my attendance". INSTRUCTOR_FILL: the instructor completed it for them.
+ * AUTO_ABSENT: no check-in when the instructor completed the day. INSTRUCTOR: entered or corrected by staff.
+ */
+export type AttendanceSource = "CHECKIN" | "STUDENT_FILL" | "INSTRUCTOR_FILL" | "AUTO_ABSENT" | "INSTRUCTOR" | "INTEGRATION";
+/**
  * One student's mark for a class day. The handwritten fields (times and signature) come from the
  * handwritten attendance app or are entered on the monthly sheet; older records only have status/hours/note.
  */
@@ -176,16 +194,40 @@ export type AttendanceRecord = {
   lunchIn?: string;
   endTime?: string;
   studentSignature?: HandSignature | null;
+  /** Exact counted minutes (hours is minutes / 60 rounded to 2 decimals). Totals add minutes, so they never drift. */
+  minutes?: number;
+  source?: AttendanceSource;
+  /** Exact server time of the check-in and of the fill-out. */
+  checkInAt?: Date | null;
+  checkOutAt?: Date | null;
+  /** The student pressed "Fill my attendance": their confirmation of the day, instead of a daily signature. */
+  studentFilledAt?: Date | null;
 };
+
+export type DayCounts = { enrolled: number; present: number; late: number; absent: number; excused: number; holiday: number; minutes: number };
+/** The instructor's signature on one class day. recordsHash covers every student's mark; a later change shows it. */
+export type DailySignoff = { signature: StaffSignature; recordsHash: string; counts: DayCounts };
+
 /** One document per class per date; records keyed by enrollment id. */
-export type ClassSession = { _id: string; classId: string; date: string; records: Record<string, AttendanceRecord>; createdAt: Date };
+export type ClassSession = {
+  _id: string;
+  classId: string;
+  date: string;
+  records: Record<string, AttendanceRecord>;
+  signoff?: DailySignoff | null;
+  signoffHistory?: { signoff: DailySignoff; replacedAt: Date }[];
+  createdAt: Date;
+};
 
 /** One student's self check-in for a class day. */
-export type CheckInEntry = { at: Date; status: "PRESENT" | "LATE"; deviceId: string; ip: string };
+export type CheckInEntry = { at: Date; status: "PRESENT" | "LATE"; deviceId: string; ip: string; round?: number; filledAt?: Date | null };
+/** One code the instructor issued. Each code works for exactly CODE_VALID_MINUTES. */
+export type CheckInRound = { openedAt: Date; expiresAt: Date; openedById: string };
 /**
- * Live student check-in for one class on one date (unique per class + date). The instructor opens it,
- * students enter the rotating code, and the instructor then confirms attendance on the normal sheet.
- * Check-ins never become attendance records by themselves: the instructor's saved sheet is the record.
+ * Live student check-in for one class on one date (unique per class + date). The instructor issues a
+ * code that works for 10 minutes; students who check in with it are on time. A new code for latecomers
+ * replaces it, and check-ins after the first 10 minutes are late. A check-in writes the student's time
+ * in to the day's attendance record straight away; the student fills out the day at the end of class.
  */
 export type CheckInSession = {
   _id: string;
@@ -197,8 +239,9 @@ export type CheckInSession = {
   expiresAt: Date; // check-in stops on its own at this time even if nobody closes it
   closedAt: Date | null;
   closedById: string | null;
-  seed: string; // random per opening; the rotating codes are derived from it
+  seed: string; // random per code; the code is derived from it, so a new code makes the old one useless
   entries: Record<string, CheckInEntry>; // keyed by enrollment id
+  rounds?: CheckInRound[];
   createdAt: Date;
 };
 

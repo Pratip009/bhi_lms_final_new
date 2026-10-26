@@ -1,16 +1,16 @@
-import { cols } from "@/db";
-import { env } from "@/lib/env";
 import { assertCanManageClass } from "@/lib/authz";
 import { apiUser, deny, isUuid } from "@/lib/http";
-import { usersById } from "@/lib/queries";
-import { todayLocal, timeLocal } from "@/lib/dates";
-import { currentCode, isOpen, sharedDevices } from "@/lib/checkin";
+import { todayLocal } from "@/lib/dates";
+import { loadDayBoard } from "@/lib/live";
+
+const NO_STORE = { "Cache-Control": "no-store, max-age=0", "X-Robots-Tag": "noindex" };
 
 /**
- * Live state of today's check-in for the instructor's screen: the current code and who has checked in.
- * Only the class's instructors and admins can read it; never cached, because the code rotates.
+ * Live attendance board for one class and date (default today): the check-in code while it's valid,
+ * who has checked in and filled out, the day's totals and the instructor's signature.
+ * Only the class's instructors and admins can read it. Never cached.
  */
-export async function GET(_: Request, { params }: { params: Promise<{ classId: string }> }) {
+export async function GET(req: Request, { params }: { params: Promise<{ classId: string }> }) {
   const user = await apiUser();
   if (!user) return deny(401);
   const { classId } = await params;
@@ -20,34 +20,11 @@ export async function GET(_: Request, { params }: { params: Promise<{ classId: s
   } catch {
     return deny();
   }
-  const { checkIns, enrollments } = await cols();
-  const now = new Date();
-  const session = await checkIns.findOne({ classId, date: todayLocal() });
-  const active = await enrollments.find({ classId, status: "ACTIVE" }, { projection: { _id: 1, studentId: 1 } }).toArray();
-  const names = await usersById(active.map((e) => e.studentId));
-  const nameOf = new Map(active.map((e) => [e._id, names.get(e.studentId)?.name ?? "Student"]));
-  const shared = session ? sharedDevices(session.entries) : new Map<string, string[]>();
-  const entries = session
-    ? Object.entries(session.entries)
-        .map(([eid, e]) => ({
-          name: nameOf.get(eid) ?? "Former student",
-          time: timeLocal(e.at),
-          at: e.at.getTime(),
-          status: e.status,
-          sameDeviceAs: (shared.get(eid) ?? []).map((x) => nameOf.get(x) ?? "another student"),
-        }))
-        .sort((a, b) => a.at - b.at)
-    : [];
-  const open = !!session && isOpen(session, now);
-  const body = {
-    exists: !!session,
-    open,
-    ...(open ? currentCode(env().SESSION_SECRET, session!, now) : { code: null, secondsLeft: null }),
-    lateAfterMinutes: session?.lateAfterMinutes ?? null,
-    openedAt: session ? timeLocal(session.openedAt) : null,
-    closesAt: session && open ? timeLocal(session.expiresAt) : null,
-    enrolled: active.length,
-    entries,
-  };
-  return Response.json(body, { headers: { "Cache-Control": "no-store, max-age=0", "X-Robots-Tag": "noindex" } });
+  const q = new URL(req.url).searchParams.get("date") ?? "";
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(q) ? q : todayLocal();
+  const board = await loadDayBoard(classId, date, { includeCode: true });
+  if (!board) return deny();
+  // `entries` and `enrolled` keep the shape older screens and tests used.
+  const entries = board.rows.filter((r) => r.checkIn).map((r) => ({ name: r.name, time: r.checkIn!.time, status: r.checkIn!.late ? "LATE" : "PRESENT", sameDeviceAs: r.attention?.startsWith("Same phone") ? [r.attention] : [] }));
+  return Response.json({ ...board, open: board.checkIn.open, code: board.checkIn.code, enrolled: board.rows.length, entries }, { headers: NO_STORE });
 }

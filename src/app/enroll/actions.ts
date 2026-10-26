@@ -204,7 +204,13 @@ export async function uploadDocumentAction(_: ActionState, fd: FormData): Promis
   if (!detected || !allowed.includes(detected.ext)) return { fieldErrors: { [errKey]: `Upload a ${allowed.map((e) => e.toUpperCase()).join(", ")} file` } };
   if (application.documents.filter((d) => d.type === type).length >= 3) return { fieldErrors: { [errKey]: "Remove a file before adding another (3 max)" } };
 
-  const key = await putFile(application._id, detected.ext, buf);
+  let key: string;
+  try {
+    key = await putFile(application._id, detected.ext, buf, detected.mime);
+  } catch (e) {
+    console.error("[upload] storage write failed", { applicationId: application._id, type }, e);
+    return { error: "We couldn't save your file right now. Please try again in a few minutes or contact the office." };
+  }
   const { applications } = await cols();
   const res = await applications.updateOne(editableFilter(application), {
     $push: { documents: { _id: newId(), type, storageKey: key, fileName: safeFileName(file.name), mimeType: detected.mime, size: buf.length, createdAt: new Date() } },

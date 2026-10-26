@@ -1,11 +1,12 @@
 import "server-only";
-import { cols, newId, isDuplicateKey, type Enrollment, type BiweeklyTimesheet, type BiweeklyDay, type AttendanceRecord } from "@/db";
+import { cols, newId, isDuplicateKey, type Enrollment, type BiweeklyTimesheet, type BiweeklyDay, type BiweeklyCode, type AttendanceRecord } from "@/db";
 import { getClassWithCourse } from "@/lib/queries";
 import { todayLocal, thisMonthLocal } from "@/lib/dates";
 import { attendanceFormatFor, type AttendanceFormat } from "@/lib/forms/templates";
 import {
   biweeklyDayHours, biweeklyTotal, contentHash, hoursFromTimes, monthDates, monthlyEntriesHash, periodDates, periodEnd, periodStartFor, periodsBetween,
 } from "@/lib/timesheet";
+import { hoursFromMinutes, minutesOf } from "@/lib/attendance-math";
 
 /** The attendance sheet a student uses, from their application's funding track. */
 export async function sheetFormatFor(studentId: string): Promise<AttendanceFormat> {
@@ -37,7 +38,8 @@ export async function loadMonthlySheet(enrollment: Enrollment, month: string) {
   const hash = monthlyEntriesHash(recorded);
   const student = await users.findOne({ _id: enrollment.studentId }, { projection: { name: 1, email: 1 } });
   const totals = {
-    hours: Math.round(recorded.reduce((s, r) => s + (Number(r.record.hours) || 0), 0) * 100) / 100,
+    // Added in whole minutes, so many short days can't drift by rounding.
+    hours: hoursFromMinutes(recorded.reduce((s, r) => s + minutesOf(r.record), 0)),
     present: recorded.filter((r) => r.record.status === "PRESENT" || r.record.status === "LATE").length,
     absent: recorded.filter((r) => r.record.status === "ABSENT").length,
     holiday: recorded.filter((r) => r.record.status === "HOLIDAY").length,
@@ -136,4 +138,35 @@ export async function biweeklyTotals(sheet: BiweeklyTimesheet) {
     customerSignedCurrent: !!sheet.customerSignature && sheet.customerSignature.dataHash === customerContentHash(sheet),
     instructorSignedCurrent: !!sheet.instructorSignature && sheet.instructorSignature.dataHash === hash,
   };
+}
+
+/**
+ * Writes one day onto the student's EQISS biweekly report (creating that period's report if needed),
+ * so the report fills itself as the student checks in and fills out. Completed (fully signed) reports
+ * are never touched. Returns true when the day was written.
+ */
+export async function syncBiweeklyDay(
+  enrollment: Enrollment, date: string, day: { timeIn: string; timeOut: string; code: BiweeklyCode; customerInitials?: string }, byId: string,
+): Promise<boolean> {
+  const row = await getClassWithCourse(enrollment.classId);
+  if (!row) return false;
+  const periodStart = periodStartFor(row.klass.startDate, date);
+  const { biweeklySheets } = await cols();
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const sheet = await getOrCreateBiweekly(enrollment, periodStart);
+    if (!sheet || sheet.status === "COMPLETED") return false;
+    const i = sheet.days.findIndex((d) => d.date === date);
+    if (i < 0) return false;
+    const next: BiweeklyDay = { ...sheet.days[i], code: day.code, timeIn: day.code ? "" : day.timeIn, timeOut: day.code ? "" : day.timeOut };
+    if (day.customerInitials !== undefined) next.customerInitials = day.customerInitials;
+    next.hours = biweeklyDayHours(next);
+    const now = new Date();
+    // Optimistic: only writes if nobody saved the report in between; otherwise reload and retry.
+    const res = await biweeklySheets.updateOne(
+      { _id: sheet._id, updatedAt: sheet.updatedAt, status: { $ne: "COMPLETED" } },
+      { $set: { [`days.${i}`]: next, updatedAt: now }, $push: { history: { at: now, byId, action: "attendance_sync" } } },
+    );
+    if (res.matchedCount) return true;
+  }
+  return false;
 }

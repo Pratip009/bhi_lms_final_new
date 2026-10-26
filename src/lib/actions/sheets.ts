@@ -72,7 +72,8 @@ export async function saveDailyEntryAction(enrollmentId: string, date: string, _
   const now = new Date();
   const mark = { status: status as AttendanceStatus, hours, note, ...times };
   const set: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries({ ...mark, recordedById: user._id, updatedAt: now })) set[`records.${e._id}.${k}`] = v;
+  const minutes = Math.round(hours * 60);
+  for (const [k, v] of Object.entries({ ...mark, minutes, source: "INSTRUCTOR", recordedById: user._id, updatedAt: now })) set[`records.${e._id}.${k}`] = v;
   const sig = String(fd.get("signature") ?? "");
   if (sig) {
     const parsed = signatureSchema.safeParse(sig);

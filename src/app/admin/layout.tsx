@@ -17,7 +17,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     { href: "/admin/students", label: "Students" },
     { href: "/admin/courses", label: "Courses and classes" },
     { href: "/admin/instructors", label: "Instructors", badge: pendingInstructors },
-    { href: "/admin/attendance", label: "Attendance" },
+    { href: "/admin/live", label: "Live attendance" },
+    { href: "/admin/attendance", label: "Attendance records" },
     { href: "/admin/reports", label: "Progress reports" },
   ];
   return <StaffShell name={admin.name} role="Admin" nav={nav}>{children}</StaffShell>;

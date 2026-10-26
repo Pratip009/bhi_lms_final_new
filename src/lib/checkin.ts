@@ -1,42 +1,38 @@
 // Rules for live student check-in. Pure functions (the secret is passed in), so they can be unit-tested.
 import { createHmac, timingSafeEqual } from "node:crypto";
-import type { AttendanceRecord, CheckInEntry, CheckInSession } from "@/db";
+import type { CheckInEntry, CheckInSession } from "@/db";
 
-/** A new code appears every 30 seconds; the previous one is still accepted, so a code lives 30 to 60 seconds. */
-export const CODE_PERIOD_SECONDS = 30;
-/** Check-in closes itself after this long even if the instructor forgets. */
-export const MAX_OPEN_MINUTES = 240;
-export const DEFAULT_LATE_AFTER_MINUTES = 10;
+/** Each code works for exactly this long. Checking in with the first code of the day counts as on time. */
+export const CODE_VALID_MINUTES = 10;
+export const CODE_VALID_MS = CODE_VALID_MINUTES * 60_000;
 
 type Codeable = Pick<CheckInSession, "_id" | "seed">;
 
-const windowOf = (now: Date) => Math.floor(now.getTime() / (CODE_PERIOD_SECONDS * 1000));
-
-export function codeFor(secret: string, s: Codeable, window: number): string {
-  const h = createHmac("sha256", secret).update(`checkin:${s._id}:${s.seed}:${window}`).digest();
+/**
+ * The 6-digit code for one issued code (session id + seed). Derived with an HMAC of the server secret,
+ * so it is never stored in plain text and can't be predicted; a new code (new seed) gives a new number.
+ */
+export function codeFor(secret: string, s: Codeable): string {
+  const h = createHmac("sha256", secret).update(`checkin:${s._id}:${s.seed}`).digest();
   return (h.readUInt32BE(0) % 1_000_000).toString().padStart(6, "0");
 }
 
-export function currentCode(secret: string, s: Codeable, now = new Date()) {
-  const w = windowOf(now);
-  const nextChangeMs = (w + 1) * CODE_PERIOD_SECONDS * 1000 - now.getTime();
-  return { code: codeFor(secret, s, w), secondsLeft: Math.max(1, Math.ceil(nextChangeMs / 1000)) };
-}
-
-/** Accepts the code on screen now or the one just before it (covers a student typing as it changes). */
-export function codeMatches(secret: string, s: Codeable, code: string, now = new Date()): boolean {
+/** Constant-time comparison with the current code. Expiry is checked separately (and atomically in the database). */
+export function codeMatches(secret: string, s: Codeable, code: string): boolean {
   if (!/^\d{6}$/.test(code)) return false;
-  const w = windowOf(now);
-  let ok = false;
-  for (const win of [w, w - 1]) {
-    // Compare every candidate in constant time, without stopping early.
-    ok = timingSafeEqual(Buffer.from(codeFor(secret, s, win)), Buffer.from(code)) || ok;
-  }
-  return ok;
+  return timingSafeEqual(Buffer.from(codeFor(secret, s)), Buffer.from(code));
 }
 
 export const isOpen = (s: Pick<CheckInSession, "closedAt" | "expiresAt">, now = new Date()) => !s.closedAt && s.expiresAt > now;
 
+/** Milliseconds the current code still works (0 when closed or expired). */
+export const msLeft = (s: Pick<CheckInSession, "closedAt" | "expiresAt">, now = new Date()) =>
+  isOpen(s, now) ? s.expiresAt.getTime() - now.getTime() : 0;
+
+/**
+ * On time = within the first CODE_VALID_MINUTES after the day's first code was issued (inclusive).
+ * lateAfterMinutes is stored on the session (always CODE_VALID_MINUTES for new sessions).
+ */
 export function statusAt(s: Pick<CheckInSession, "openedAt" | "lateAfterMinutes">, now = new Date()): CheckInEntry["status"] {
   return now.getTime() - s.openedAt.getTime() <= s.lateAfterMinutes * 60_000 ? "PRESENT" : "LATE";
 }
@@ -48,21 +44,4 @@ export function sharedDevices(entries: Record<string, Pick<CheckInEntry, "device
   const out = new Map<string, string[]>();
   for (const ids of byDevice.values()) if (ids.length > 1) for (const id of ids) out.set(id, ids.filter((x) => x !== id));
   return out;
-}
-
-/**
- * Check-ins the instructor still has to act on: the student checked in, but the saved sheet has no
- * mark for them, or marked them absent before they checked in (the sheet was saved first). An absent
- * mark saved after the check-in is the instructor's decision (e.g. someone checked in for a friend).
- */
-export function unconfirmed(
-  entries: Record<string, Pick<CheckInEntry, "at">>,
-  records: Record<string, Pick<AttendanceRecord, "status" | "updatedAt">> | undefined,
-): string[] {
-  return Object.entries(entries)
-    .filter(([eid, e]) => {
-      const r = records?.[eid];
-      return !r || (r.status === "ABSENT" && r.updatedAt < e.at);
-    })
-    .map(([eid]) => eid);
 }

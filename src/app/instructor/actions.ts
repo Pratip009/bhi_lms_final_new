@@ -31,10 +31,12 @@ export async function recordAttendanceAction(classId: string, _: ActionState, fd
 
   // Only active enrollments of this class can be marked; ids from the form are matched against this list.
   const roster = await enrollments.find({ classId, status: "ACTIVE" }, { projection: { _id: 1 } }).toArray();
+  const before = await classSessions.findOne({ classId, date: date.data }, { projection: { records: 1 } });
   const set: Record<string, unknown> = {};
   const marks: Record<string, { status: AttendanceStatus; hours: number; note: string }> = {};
   const errors: Record<string, string> = {};
   const now = new Date();
+  let submitted = 0;
   for (const { _id: id } of roster) {
     const status = fd.get(`status_${id}`);
     if (!status) continue; // not marked; leave as is
@@ -42,15 +44,21 @@ export async function recordAttendanceAction(classId: string, _: ActionState, fd
     const hours = Number(fd.get(`hours_${id}`) ?? 0);
     if (!Number.isFinite(hours) || hours < 0 || hours > 24) { errors[`hours_${id}`] = "0 to 24"; continue; }
     const mark = { status: status as AttendanceStatus, hours: Math.round(hours * 100) / 100, note: String(fd.get(`note_${id}`) ?? "").trim().slice(0, 300) };
+    submitted++;
+    // Rows that didn't change are left alone, so saving the sheet during class never takes over a
+    // student's check-in (they can still fill out the day) and the audit log only shows real changes.
+    const prev = before?.records[id];
+    if (prev && prev.status === mark.status && Number(prev.hours) === mark.hours && (prev.note ?? "") === mark.note) continue;
     marks[id] = mark;
+    const minutes = Math.round(mark.hours * 60);
     // Field-by-field so handwritten times and the student's signature on the same day are kept.
-    for (const [k, v] of Object.entries({ ...mark, recordedById: user._id, updatedAt: now })) set[`records.${id}.${k}`] = v;
+    for (const [k, v] of Object.entries({ ...mark, minutes, source: "INSTRUCTOR", recordedById: user._id, updatedAt: now })) set[`records.${id}.${k}`] = v;
   }
   if (Object.keys(errors).length) return { error: "Fix the highlighted rows.", fieldErrors: errors };
   const count = Object.keys(marks).length;
-  if (!count) return { error: "Mark at least one student." };
+  if (!submitted) return { error: "Mark at least one student." };
+  if (!count) return { ok: true, message: "Nothing changed." };
 
-  const before = await classSessions.findOne({ classId, date: date.data }, { projection: { records: 1 } });
   const changes = attendanceChanges(before?.records, marks);
 
   // One document per class and date (unique index); a single upsert writes all marks at once.

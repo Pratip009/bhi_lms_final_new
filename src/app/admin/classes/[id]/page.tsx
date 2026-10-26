@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { todayLocal, thisMonthLocal } from "@/lib/dates";
+import { localDateOf, timeLocal, todayLocal, thisMonthLocal } from "@/lib/dates";
 import { notFound } from "next/navigation";
 import { cols } from "@/db";
 import { requireAdmin } from "@/lib/auth";
@@ -8,14 +8,16 @@ import { getClassWithCourse, instructorsForClasses, rosterForClass, usersById } 
 import { ActionButton, AssignInstructorForm, ClassForm, MergeSectionsForm, MoveStudentForm } from "@/components/action-widgets";
 import { AssignStudentToThisClass } from "@/components/assign-student";
 import { Card, Empty, PageHeader, StatusBadge, Table, Td, fmtDate } from "@/components/ui";
-import { CheckInPanel } from "@/components/checkin-panel";
-import { startCheckInAction, closeCheckInAction } from "@/lib/actions/checkin";
+import { LiveDayBoard } from "@/components/live-day-board";
+import { ClassSettingsForm } from "@/components/class-settings-form";
+import { startCheckInAction, closeCheckInAction, completeDayAction, signDayAction } from "@/lib/actions/checkin";
+import { saveClassSettingsAction, sendClassroomLinkAction } from "@/lib/actions/class-settings";
 import {
   archiveClassAction, assignInstructorAction, endEnrollmentAction, mergeSectionsAction, moveStudentAction, removeInstructorAction, saveClassAction,
 } from "../../actions";
 
 export default async function AdminClassPage({ params }: { params: Promise<{ id: string }> }) {
-  await requireAdmin();
+  const admin = await requireAdmin();
   const { id } = await params;
   if (!/^[0-9a-f-]{36}$/.test(id)) notFound();
   const row = await getClassWithCourse(id);
@@ -60,9 +62,18 @@ export default async function AdminClassPage({ params }: { params: Promise<{ id:
         } />
       {mergedInto && <p className="mb-4 rounded-md bg-mist p-3 text-sm">This section was merged into <Link href={`/admin/classes/${klass.mergedIntoClassId}`} className="font-semibold underline">{mergedInto.code}</Link> on {fmtDate(klass.mergedAt)}. Its records are kept here.</p>}
       {!klass.archived && today >= klass.startDate && today <= klass.endDate && activeIds.size > 0 && (
-        <CheckInPanel classId={klass._id} start={startCheckInAction.bind(null, klass._id)} close={closeCheckInAction.bind(null, klass._id)} />
+        <LiveDayBoard classId={klass._id} date={today} canSign={false} viewerName={admin.name}
+          start={startCheckInAction.bind(null, klass._id)} close={closeCheckInAction.bind(null, klass._id)}
+          complete={completeDayAction.bind(null, klass._id, today)} sign={signDayAction.bind(null, klass._id, today)} />
       )}
       <div className="space-y-6">
+        <Card title="Class settings">
+          <ClassSettingsForm studentCount={activeIds.size} save={saveClassSettingsAction.bind(null, klass._id)} sendLink={sendClassroomLinkAction.bind(null, klass._id)}
+            settings={{
+              classroomUrl: klass.classroomUrl ?? "", classroomSentAt: klass.classroomSentAt ? `${localDateOf(klass.classroomSentAt)} ${timeLocal(klass.classroomSentAt)}` : null,
+              sessionStart: klass.sessionStart ?? "", sessionEnd: klass.sessionEnd ?? "", breakStart: klass.breakStart ?? "", breakEnd: klass.breakEnd ?? "",
+            }} />
+        </Card>
         <Card title={`Roster (${activeIds.size}/${klass.capacity})`}>
           {roster.length === 0 ? <Empty>No students yet.</Empty> : (
             <Table head={["Student", "Program", "Status", "Attended", "Attendance sheet", `Report ${thisMonth}`, ""]}>
