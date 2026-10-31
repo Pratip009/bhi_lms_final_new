@@ -7,6 +7,7 @@ type Act = (prev: ActionState, fd: FormData) => Promise<ActionState>;
 export type ClassSettings = {
   classroomUrl: string; classroomSentAt: string | null;
   sessionStart: string; sessionEnd: string; breakStart: string; breakEnd: string;
+  checkInEnabled?: boolean; lateAfterMinutes?: number | null;
 };
 
 function TimeInput({ name, label, value }: { name: string; label: string; value: string }) {
@@ -18,48 +19,41 @@ function TimeInput({ name, label, value }: { name: string; label: string; value:
   );
 }
 
-function LinkField({ value }: { value: string }) {
-  const { state } = useFormCtx();
-  const err = state.fieldErrors?.classroomUrl;
+/**
+ * Instructor or admin: daily class times (time in/out start from these, the break is taken off as lunch),
+ * when a student counts as late, and whether students check in with a code on their phone.
+ */
+export function ClassSettingsForm({ settings, save }: { settings: ClassSettings; save: Act; sendLink?: Act; studentCount?: number }) {
   return (
-    <label className="block text-sm">
-      <span className="mb-1 block font-medium">Google Classroom link</span>
-      <input type="url" name="classroomUrl" defaultValue={value} placeholder="https://classroom.google.com/c/..." maxLength={500} aria-invalid={!!err}
-        className="w-full rounded-md border border-line px-3 py-2" />
-      {err && <span className="mt-1 block text-xs font-medium text-brick-600">{err}</span>}
-    </label>
+    <ActionForm action={save} className="space-y-4">
+      <fieldset>
+        <legend className="mb-1 text-sm font-medium">Class times</legend>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <TimeInput name="sessionStart" label="Class starts" value={settings.sessionStart} />
+          <TimeInput name="sessionEnd" label="Class ends" value={settings.sessionEnd} />
+          <TimeInput name="breakStart" label="Lunch starts" value={settings.breakStart} />
+          <TimeInput name="breakEnd" label="Lunch ends" value={settings.breakEnd} />
+        </div>
+        <p className="mt-1 text-xs text-slate-600">Time in and out on the attendance sheet start from these times. Lunch is taken off the hours. Leave lunch empty if there is none.</p>
+      </fieldset>
+      <LateField value={settings.lateAfterMinutes} />
+      <label className="flex items-start gap-3 rounded-md border border-line p-3 text-sm">
+        <input type="checkbox" name="checkInEnabled" defaultChecked={!!settings.checkInEnabled} className="mt-0.5 h-4 w-4 accent-pine-700" />
+        <span><strong>Students check in with a code on their phone</strong> (optional). When off, the instructor simply marks attendance on the sheet.</span>
+      </label>
+      <Submit>Save class settings</Submit>
+    </ActionForm>
   );
 }
 
-/** Instructor or admin: the class's Google Classroom link and daily class times. */
-export function ClassSettingsForm({ settings, save, sendLink, studentCount }: { settings: ClassSettings; save: Act; sendLink: Act; studentCount: number }) {
+function LateField({ value }: { value?: number | null }) {
+  const { state } = useFormCtx();
+  const err = state.fieldErrors?.lateAfterMinutes;
   return (
-    <div className="space-y-5">
-      <ActionForm action={save} className="space-y-4">
-        <LinkField value={settings.classroomUrl} />
-        <fieldset>
-          <legend className="mb-1 text-sm font-medium">Class times (used to count hours exactly)</legend>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <TimeInput name="sessionStart" label="Class starts" value={settings.sessionStart} />
-            <TimeInput name="sessionEnd" label="Class ends" value={settings.sessionEnd} />
-            <TimeInput name="breakStart" label="Break starts" value={settings.breakStart} />
-            <TimeInput name="breakEnd" label="Break ends" value={settings.breakEnd} />
-          </div>
-          <p className="mt-1 text-xs text-slate-600">
-            Time before class starts or after it ends isn't counted, and the break is deducted. Leave the break empty if there is none.
-            Changes apply to days filled out from now on.
-          </p>
-        </fieldset>
-        <Submit>Save class settings</Submit>
-      </ActionForm>
-      {settings.classroomUrl && (
-        <ActionForm action={sendLink} confirm={`Email the Google Classroom link to ${studentCount} student${studentCount === 1 ? "" : "s"}?`} className="border-t border-line pt-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm text-slate-600">{settings.classroomSentAt ? `Last emailed ${settings.classroomSentAt}.` : "Not emailed yet. Students also see the link on their dashboard."}</p>
-            <Submit variant="secondary">Email the link to students</Submit>
-          </div>
-        </ActionForm>
-      )}
-    </div>
+    <label className="block max-w-xs text-sm">
+      <span className="mb-1 block font-medium">Late after (minutes past class start)</span>
+      <input type="number" name="lateAfterMinutes" min={0} max={120} defaultValue={value ?? 10} className="w-24 rounded-md border border-line px-2 py-1.5" aria-invalid={!!err} />
+      {err && <span className="mt-1 block text-xs font-medium text-brick-600">{err}</span>}
+    </label>
   );
 }

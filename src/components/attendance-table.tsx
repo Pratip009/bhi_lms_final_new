@@ -1,7 +1,7 @@
 import { Badge, Empty, Table, Td, fmtDate } from "./ui";
 import { ATTENDANCE_LABEL } from "@/lib/queries";
 
-const tone = { PRESENT: "pine", LATE: "marigold", ABSENT: "brick", EXCUSED: "neutral", HOLIDAY: "neutral" } as const;
+const tone = { PRESENT: "pine", LATE: "marigold", ABSENT: "brick", EXCUSED: "neutral", HOLIDAY: "neutral", SICK: "neutral" } as const;
 
 export function AttendanceTable({ rows }: { rows: { date: string; status: keyof typeof tone; hours: number; note: string }[] }) {
   if (!rows.length) return <Empty>No attendance recorded yet.</Empty>;

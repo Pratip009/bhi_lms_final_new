@@ -69,17 +69,16 @@ export default async function AdminClassPage({ params }: { params: Promise<{ id:
           </>
         } />
       {mergedInto && <p className="mb-4 rounded-md bg-mist p-3 text-sm">This section was merged into <Link href={`/admin/classes/${klass.mergedIntoClassId}`} className="font-semibold underline">{mergedInto.code}</Link> on {fmtDate(klass.mergedAt)}. Its records are kept here.</p>}
-      {!klass.archived && today >= klass.startDate && today <= klass.endDate && activeIds.size > 0 && (
-        <LiveDayBoard classId={klass._id} date={today} canSign={false} viewerName={admin.name}
-          start={startCheckInAction.bind(null, klass._id)} close={closeCheckInAction.bind(null, klass._id)}
-          complete={completeDayAction.bind(null, klass._id, today)} sign={signDayAction.bind(null, klass._id, today)} />
-      )}
+      <div className="mb-6 flex flex-wrap gap-3">
+        <Link href={`/admin/classes/${klass._id}/attendance`} className="rounded-md bg-pine-700 px-4 py-2 text-sm font-semibold text-white">Daily attendance</Link>
+      </div>
       <div className="space-y-6">
         <Card title="Class settings">
           <ClassSettingsForm studentCount={activeIds.size} save={saveClassSettingsAction.bind(null, klass._id)} sendLink={sendClassroomLinkAction.bind(null, klass._id)}
             settings={{
               classroomUrl: klass.classroomUrl ?? "", classroomSentAt: klass.classroomSentAt ? `${localDateOf(klass.classroomSentAt)} ${timeLocal(klass.classroomSentAt)}` : null,
               sessionStart: klass.sessionStart ?? "", sessionEnd: klass.sessionEnd ?? "", breakStart: klass.breakStart ?? "", breakEnd: klass.breakEnd ?? "",
+              checkInEnabled: !!klass.checkInEnabled, lateAfterMinutes: klass.lateAfterMinutes ?? null,
             }} />
         </Card>
         <Card title={`Roster (${activeIds.size}/${klass.capacity})`}>

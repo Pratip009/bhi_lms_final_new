@@ -45,3 +45,13 @@ export function sharedDevices(entries: Record<string, Pick<CheckInEntry, "device
   for (const ids of byDevice.values()) if (ids.length > 1) for (const id of ids) out.set(id, ids.filter((x) => x !== id));
   return out;
 }
+
+/**
+ * On time or late for a check-in at local time `nowHHMM`: late when more than `lateAfterMinutes` after the
+ * class start time. Classes without a start time fall back to `fallback` (the first-code rule above).
+ */
+export function checkInStatus(nowHHMM: string, sessionStart: string | null | undefined, lateAfterMinutes: number, fallback: CheckInEntry["status"]): CheckInEntry["status"] {
+  if (!sessionStart || !/^\d{2}:\d{2}$/.test(sessionStart)) return fallback;
+  const m = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
+  return m(nowHHMM) > m(sessionStart) + Math.max(0, lateAfterMinutes) ? "LATE" : "PRESENT";
+}

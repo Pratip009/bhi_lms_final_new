@@ -37,7 +37,7 @@ export default async function StudentDashboard() {
           <div><dt className="text-slate-500">Email</dt><dd className="font-medium">{user.email}</dd></div>
           <div><dt className="text-slate-500">Enrollment</dt><dd className="font-medium">{describeEnrollment(application)}</dd></div>
         </dl>
-        <p className="mt-3 text-xs text-slate-500">Your Google Classroom link is on each class below once your instructor shares it.</p>
+        <a href="https://classroom.google.com" target="_blank" rel="noopener noreferrer" className="mt-4 inline-flex items-center gap-2 rounded-md bg-pine-700 px-4 py-2 text-sm font-semibold text-white hover:bg-pine-800">Open Google Classroom ↗</a>
       </Card>
       {rows.length === 0 && (
         <Card title="No current class" className="mb-6">
@@ -58,10 +58,7 @@ export default async function StudentDashboard() {
               <p className="mt-2 text-sm">{fmtDate(klass.startDate)} to {fmtDate(klass.endDate)}</p>
               {klass.schedule && <p className="text-sm text-slate-600">{klass.schedule}{klass.location ? `, ${klass.location}` : ""}</p>}
               <p className="mt-3 text-sm text-slate-600">Instructor: {[...new Set(names)].join(", ") || "To be assigned"}</p>
-              {klass.classroomUrl ? (
-                <a href={klass.classroomUrl} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex items-center gap-2 rounded-md bg-pine-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-pine-800">Open Google Classroom ↗</a>
-              ) : <p className="mt-3 text-xs text-slate-500">Google Classroom link not shared yet.</p>}
-              {runsToday && <div className="mt-4"><CheckInBox classId={klass._id} checkIn={checkInAction.bind(null, klass._id)} fill={fillMyAttendanceAction.bind(null, klass._id)} /></div>}
+              {runsToday && klass.checkInEnabled && <div className="mt-4"><CheckInBox classId={klass._id} checkIn={checkInAction.bind(null, klass._id)} fill={fillMyAttendanceAction.bind(null, klass._id)} /></div>}
               <div className="mt-4 flex flex-wrap gap-4 text-sm font-semibold">
                 <Link href={`/dashboard/attendance/${enrollment._id}`} className="text-pine-700 underline">
                   {format === "BIWEEKLY" ? "Biweekly attendance report" : "Monthly attendance sheet"}

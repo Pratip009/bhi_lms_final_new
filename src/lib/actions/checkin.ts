@@ -12,7 +12,7 @@ import { rateLimit } from "@/lib/rate-limit";
 import { audit } from "@/lib/audit";
 import { dateProblem } from "@/lib/attendance-rules";
 import { APP_TIMEZONE, timeLocal, timeLocalExact, todayLocal } from "@/lib/dates";
-import { codeMatches, isOpen, statusAt, CODE_VALID_MINUTES, CODE_VALID_MS } from "@/lib/checkin";
+import { checkInStatus, codeMatches, isOpen, statusAt, CODE_VALID_MINUTES, CODE_VALID_MS } from "@/lib/checkin";
 import { computeDay, dailyRecordsHash, dayCounts, initialsOf, isPendingFill, localHHMM } from "@/lib/attendance-math";
 import { loadDayBoard, rosterOn, scheduleOf } from "@/lib/live";
 import { sheetFormatFor, syncBiweeklyDay } from "@/lib/sheets";
@@ -79,6 +79,7 @@ export async function startCheckInAction(classId: string, _: ActionState): Promi
   const today = todayLocal(now);
   const problem = dateProblem(klass, today, "ADMIN"); // today is never edit-locked
   if (problem) return { error: problem.replace("That date", "Today") };
+  if (!klass.checkInEnabled) return { error: "Check-in codes are turned off for this class. Turn them on in Class settings, or mark attendance on the sheet." };
   if (!(await enrollments.countDocuments({ classId, status: "ACTIVE" }, { limit: 1 }))) return { error: "There are no students in this class yet." };
   if (await daySigned(classId, today)) return { error: "Today's attendance is already signed. Check-in can't be reopened." };
 
@@ -158,7 +159,9 @@ export async function checkInAction(classId: string, _: ActionState, fd: FormDat
       secure: env().NODE_ENV === "production" && env().APP_URL.startsWith("https://"),
     });
   }
-  const status = statusAt(session, now);
+  // Late is measured from the class start time when one is set (plus the class's grace minutes);
+  // without a start time, from when the first code of the day was issued.
+  const status = checkInStatus(localHHMM(now, APP_TIMEZONE, "floor"), klass.sessionStart, klass.lateAfterMinutes ?? CODE_VALID_MINUTES, statusAt(session, now));
   const { ip } = await clientMeta();
   const round = session.rounds?.length ?? 1;
   // Atomic: only writes if this student hasn't checked in, the same code is still current and unexpired.
@@ -235,7 +238,8 @@ export async function fillMyAttendanceAction(classId: string, _: ActionState): P
   if (!res.modifiedCount) return { error: "Today's attendance changed meanwhile. Reload the page." };
   await checkIns.updateOne({ _id: ci!._id }, { $set: { [`entries.${enrollment._id}.filledAt`]: now } });
   if ((await sheetFormatFor(user._id)) === "BIWEEKLY") {
-    await syncBiweeklyDay(enrollment, today, { timeIn: result.startTime, timeOut: result.endTime, code: "", customerInitials: initialsOf(user.name) }, user._id);
+    // The customer initials are left for the student to enter on their own report (never filled in for them).
+    await syncBiweeklyDay(enrollment, today, { timeIn: result.startTime, timeOut: result.endTime, code: "" }, user._id);
   }
   await audit(user._id, "attendance.student_fill", "class", classId, { date: today, enrollmentId: enrollment._id, ...fields, checkInAt: entry.at.toISOString(), checkOutAt: now.toISOString() });
   refresh();
@@ -324,7 +328,8 @@ export async function completeDayAction(classId: string, date: string, _: Action
  */
 export async function signDayAction(classId: string, date: string, _: ActionState, fd: FormData): Promise<ActionState> {
   const user = await requireUser();
-  if (user.role !== "INSTRUCTOR") return { error: "Only the class's instructor signs daily attendance." };
+  // The class's instructor signs; an admin can sign on their behalf (e.g. when a substitute taught).
+  if (user.role !== "INSTRUCTOR" && user.role !== "ADMIN") return { error: "Only staff can sign daily attendance." };
   const denied = await canManage(user, classId);
   if (denied) return denied;
   if (!dateSchema.safeParse(date).success) return { error: "Invalid date." };

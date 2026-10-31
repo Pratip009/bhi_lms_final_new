@@ -7,6 +7,7 @@ import {
   biweeklyDayHours, biweeklyTotal, contentHash, hoursFromTimes, monthDates, monthlyEntriesHash, periodDates, periodEnd, periodStartFor, periodsBetween,
 } from "@/lib/timesheet";
 import { hoursFromMinutes, minutesOf } from "@/lib/attendance-math";
+import { biweeklyCodeFor, statusForBiweeklyCode } from "@/lib/attendance-rules";
 
 /** The attendance sheet a student uses, from their application's funding track. */
 export async function sheetFormatFor(studentId: string): Promise<AttendanceFormat> {
@@ -169,4 +170,50 @@ export async function syncBiweeklyDay(
     if (res.matchedCount) return true;
   }
   return false;
+}
+
+/**
+ * Writes a day's attendance onto the EQISS biweekly report so the report and the daily record always
+ * agree: attended days carry the times, other statuses become A / H / S with no hours. The customer's
+ * initials are never filled in here; the student enters them on their own report.
+ */
+export async function syncRecordToBiweekly(enrollment: Enrollment, date: string, record: Pick<AttendanceRecord, "status" | "startTime" | "endTime">, byId: string) {
+  const code = biweeklyCodeFor(record.status);
+  return syncBiweeklyDay(enrollment, date, { timeIn: code ? "" : record.startTime ?? "", timeOut: code ? "" : record.endTime ?? "", code }, byId);
+}
+
+/**
+ * The other direction: when staff change days on an EQISS biweekly report, the daily records change to
+ * match, so admin screens, exports and the daily sign-off show the same thing as the report.
+ */
+export async function syncBiweeklyToDays(sheet: BiweeklyTimesheet, before: BiweeklyDay[], byId: string) {
+  const { classSessions, enrollments } = await cols();
+  const enrollment = await enrollments.findOne({ _id: sheet.enrollmentId });
+  if (!enrollment) return;
+  const today = todayLocal();
+  const now = new Date();
+  for (const d of sheet.days) {
+    const prev = before.find((x) => x.date === d.date);
+    if (prev && prev.code === d.code && prev.timeIn === d.timeIn && prev.timeOut === d.timeOut) continue;
+    if (d.date > today) continue;
+    const status = statusForBiweeklyCode(d.code);
+    let fields: Record<string, unknown>;
+    if (status) fields = { status, hours: 0, minutes: 0, startTime: "", lunchOut: "", lunchIn: "", endTime: "" };
+    else if (d.timeIn && d.timeOut) {
+      const minutes = Math.round(biweeklyDayHours(d) * 60);
+      fields = { status: "PRESENT", hours: hoursFromMinutes(minutes), minutes, startTime: d.timeIn, lunchOut: "", lunchIn: "", endTime: d.timeOut };
+    } else continue; // a cleared day: leave the daily record as it was
+    const existing = await classSessions.findOne({ classId: sheet.classId, date: d.date }, { projection: { [`records.${enrollment._id}`]: 1 } });
+    const keepLate = existing?.records?.[enrollment._id]?.status === "LATE" && fields.status === "PRESENT";
+    const set: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries({ ...fields, ...(keepLate ? { status: "LATE" } : {}), source: "BIWEEKLY", recordedById: byId, updatedAt: now })) set[`records.${enrollment._id}.${k}`] = v;
+    await classSessions.updateOne(
+      { classId: sheet.classId, date: d.date },
+      { $set: set, $setOnInsert: { _id: newId(), classId: sheet.classId, date: d.date, createdAt: now } },
+      { upsert: true },
+    ).catch(async (e) => {
+      if (!isDuplicateKey(e)) throw e;
+      await classSessions.updateOne({ classId: sheet.classId, date: d.date }, { $set: set });
+    });
+  }
 }

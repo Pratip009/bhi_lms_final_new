@@ -28,10 +28,8 @@ export default async function StudentClassPage({ params }: { params: Promise<{ i
     <StudentShell name={user.name} step={4}>
       <Link href="/dashboard" className="text-sm text-pine-700 underline">My classes</Link>
       <PageHeader title={row.course.name} description={`${row.klass.code}, ${row.klass.cohort}${row.klass.schedule ? `, ${row.klass.schedule}` : ""}`} />
-      {row.klass.classroomUrl && (
-        <p className="mb-4"><a href={row.klass.classroomUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 rounded-md bg-pine-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-pine-800">Open Google Classroom ↗</a></p>
-      )}
-      {runsToday && <div className="mb-6"><CheckInBox classId={id} checkIn={checkInAction.bind(null, id)} fill={fillMyAttendanceAction.bind(null, id)} /></div>}
+      <p className="mb-4"><a href="https://classroom.google.com" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 rounded-md bg-pine-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-pine-800">Open Google Classroom ↗</a></p>
+      {runsToday && row.klass.checkInEnabled && <div className="mb-6"><CheckInBox classId={id} checkIn={checkInAction.bind(null, id)} fill={fillMyAttendanceAction.bind(null, id)} /></div>}
       <h2 className="mb-3 font-semibold">My attendance</h2>
       <AttendanceTable rows={attendance} />
     </StudentShell>

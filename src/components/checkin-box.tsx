@@ -121,7 +121,7 @@ export function CheckInBox({ classId, checkIn, fill }: { classId: string; checkI
 
   // 4. Recorded by staff (e.g. absent, excused).
   if (s.recorded) {
-    const label = { PRESENT: "Present", LATE: "Late", ABSENT: "Absent", EXCUSED: "Excused", HOLIDAY: "Holiday" }[s.recorded.status];
+    const label = { PRESENT: "Present", LATE: "Late", ABSENT: "Absent", EXCUSED: "Excused", HOLIDAY: "Holiday", SICK: "Sick" }[s.recorded.status];
     return (
       <div role="status" className="rounded-md border border-line bg-mist px-4 py-3 text-sm">
         <p className="font-semibold">Today: {label}{s.recorded.hours ? `, ${s.recorded.hours.toFixed(2)} h` : ""}</p>
@@ -136,7 +136,7 @@ export function CheckInBox({ classId, checkIn, fill }: { classId: string; checkI
       <div className="rounded-md border border-line bg-mist px-4 py-3 text-sm">
         {feedback}
         <p className="font-semibold">No valid check-in code right now</p>
-        <p className="mt-0.5 text-xs text-slate-600">Codes work for 10 minutes. If you're in class and missed it, ask your instructor for a new code.</p>
+        <p className="mt-0.5 text-xs text-slate-600">Codes work for 10 minutes. Missed it, or no phone with you? Tell your instructor; they'll mark you on the attendance sheet.</p>
       </div>
     );
   }

@@ -1,12 +1,13 @@
 "use server";
 
+import { syncBiweeklyToDays } from "@/lib/sheets";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { cols, newId, type AttendanceStatus, type BiweeklyCode, type BiweeklyTimesheet, type User } from "@/db";
 import { requireUser } from "@/lib/auth";
 import { getVisibleEnrollment, ForbiddenError } from "@/lib/authz";
 import { audit } from "@/lib/audit";
-import { attendanceChanges, dateProblem, enrolledOn, ATTENDANCE_STATUSES } from "@/lib/attendance-rules";
+import { attended, attendanceChanges, dateProblem, enrolledOn, ATTENDANCE_STATUSES } from "@/lib/attendance-rules";
 import { monthSchema } from "@/lib/reports/template";
 import { biweeklyDayHours, BIWEEKLY_CODES, hoursFromTimes, timesProblem, TIME_RE } from "@/lib/timesheet";
 import { biweeklyContentHash, customerContentHash, loadMonthlySheet, sheetFormatFor } from "@/lib/sheets";
@@ -57,7 +58,7 @@ export async function saveDailyEntryAction(enrollmentId: string, date: string, _
 
   const status = String(fd.get("status") ?? "");
   if (!(ATTENDANCE_STATUSES as readonly string[]).includes(status)) return { fieldErrors: { status: "Choose a status" } };
-  const off = status === "ABSENT" || status === "HOLIDAY" || status === "EXCUSED";
+  const off = !attended(status); // absent, sick, holiday and excused: no times, zero hours
   const times = Object.fromEntries((["startTime", "lunchOut", "lunchIn", "endTime"] as const).map((k) => [k, off ? "" : String(fd.get(k) ?? "").trim()]));
   const tp = timesProblem(times);
   if (tp) return { error: tp };
@@ -128,6 +129,37 @@ export async function signMonthlySheetAction(enrollmentId: string, month: string
   await audit(user._id, "attendance.month_signoff", "enrollment", e._id, { month, resigned: !!prev });
   refresh();
   return { ok: true, message: `Attendance for ${month} signed.` };
+}
+
+/**
+ * Student signs their own attendance on their own login: the signature is added to every day of the
+ * month they attended that isn't signed yet (as on the paper sheet, one signature per day), instead of
+ * passing the instructor's device around.
+ */
+export async function signMyMonthAction(enrollmentId: string, month: string, _: ActionState, fd: FormData): Promise<ActionState> {
+  const user = await requireUser();
+  if (user.role !== "STUDENT") return NO_ACCESS;
+  const e = await visible(user, enrollmentId);
+  if (!e || e.studentId !== user._id) return NO_ACCESS;
+  if (!monthSchema.safeParse(month).success || month > thisMonthLocal()) return { error: "Invalid month." };
+  if ((await sheetFormatFor(user._id)) !== "MONTHLY") return { error: "Your attendance uses the biweekly report." };
+  const sig = signatureSchema.safeParse(String(fd.get("signature") ?? ""));
+  if (!sig.success) return { fieldErrors: { signature: "Sign in the box" } };
+  const sheet = await loadMonthlySheet(e, month);
+  if (!sheet) return { error: "Class not found." };
+  const days = sheet.rows.filter((r) => r.record && (r.record.status === "PRESENT" || r.record.status === "LATE") && !r.record.studentSignature);
+  if (!days.length) return { ok: true, message: "There are no days left to sign this month." };
+  const { classSessions } = await cols();
+  const now = new Date();
+  for (const d of days) {
+    await classSessions.updateOne(
+      { classId: e.classId, date: d.date, [`records.${e._id}.studentSignature`]: { $in: [null] } },
+      { $set: { [`records.${e._id}.studentSignature`]: { imageDataUrl: sig.data, signedAt: now, capturedById: user._id } } },
+    );
+  }
+  await audit(user._id, "attendance.student_signed_month", "enrollment", e._id, { month, days: days.map((d) => d.date) });
+  refresh();
+  return { ok: true, message: `Signed ${days.length} day${days.length === 1 ? "" : "s"}. Thank you.` };
 }
 
 // ---------- EQISS / One-Stop biweekly ITA report ----------
@@ -219,6 +251,7 @@ export async function saveBiweeklyAction(sheetId: string, _: ActionState, fd: Fo
     { $set: update, $push: { history: { at: new Date(), byId: user._id, action: staff ? "staff_edit" : "customer_edit" } } },
   );
   if (!res.matchedCount) return { error: "The report changed meanwhile. Reload the page and try again." };
+  if (staff) await syncBiweeklyToDays({ ...sheet, days }, sheet.days, user._id);
   await audit(user._id, "biweekly.save", "biweekly", sheet._id, { periodStart: sheet.periodStart, before: { days: sheet.days, header: sheet.header }, after: { days, header: update.header ?? sheet.header } });
   refresh();
   return { ok: true, message: "Report saved." };

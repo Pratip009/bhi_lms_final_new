@@ -46,8 +46,14 @@ function parseLink(raw: string): string | null {
 export async function saveClassSettingsAction(classId: string, _: ActionState, fd: FormData): Promise<ActionState> {
   const { user, error } = await guard(classId);
   if (error) return error;
-  const url = parseLink(String(fd.get("classroomUrl") ?? "").trim());
+  // The Google Classroom link is optional (students always get the general classroom.google.com button);
+  // it is only changed when the form sends it.
+  const url = fd.has("classroomUrl") ? parseLink(String(fd.get("classroomUrl") ?? "").trim()) : undefined;
   if (url === null) return { fieldErrors: { classroomUrl: "Paste the full link, starting with https://" } };
+  const late = String(fd.get("lateAfterMinutes") ?? "").trim();
+  const lateAfterMinutes = late === "" ? null : Number(late);
+  if (lateAfterMinutes !== null && (!Number.isInteger(lateAfterMinutes) || lateAfterMinutes < 0 || lateAfterMinutes > 120)) return { fieldErrors: { lateAfterMinutes: "0 to 120 minutes" } };
+  const checkInEnabled = fd.get("checkInEnabled") === "on";
   const t = (k: string) => String(fd.get(k) ?? "").trim() || null;
   const schedule = { sessionStart: t("sessionStart"), sessionEnd: t("sessionEnd"), breakStart: t("breakStart"), breakEnd: t("breakEnd") };
   const problem = scheduleProblem(schedule);
@@ -55,9 +61,10 @@ export async function saveClassSettingsAction(classId: string, _: ActionState, f
   const { classes } = await cols();
   const before = await classes.findOne({ _id: classId }, { projection: { classroomUrl: 1, sessionStart: 1, sessionEnd: 1, breakStart: 1, breakEnd: 1 } });
   if (!before) return { error: "Unknown class." };
-  const linkChanged = (before.classroomUrl ?? "") !== url;
-  await classes.updateOne({ _id: classId }, { $set: { classroomUrl: url || null, ...schedule, ...(linkChanged ? { classroomSentAt: null } : {}) } });
-  await audit(user._id, "class.settings", "class", classId, { before, after: { classroomUrl: url || null, ...schedule } });
+  const linkChanged = url !== undefined && (before.classroomUrl ?? "") !== url;
+  const after = { ...(url !== undefined ? { classroomUrl: url || null } : {}), ...schedule, lateAfterMinutes, checkInEnabled };
+  await classes.updateOne({ _id: classId }, { $set: { ...after, ...(linkChanged ? { classroomSentAt: null } : {}) } });
+  await audit(user._id, "class.settings", "class", classId, { before, after });
   revalidatePath("/instructor", "layout");
   revalidatePath("/admin", "layout");
   revalidatePath("/dashboard", "layout");

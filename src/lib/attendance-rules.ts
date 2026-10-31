@@ -45,4 +45,19 @@ export function attendanceChanges(before: Record<string, AttendanceRecord> | und
   return changes;
 }
 
-export const ATTENDANCE_STATUSES = ["PRESENT", "LATE", "ABSENT", "EXCUSED", "HOLIDAY"] as const;
+export const ATTENDANCE_STATUSES = ["PRESENT", "LATE", "ABSENT", "SICK", "HOLIDAY", "EXCUSED"] as const;
+
+/** Statuses where the student attended (times and hours apply). Every other status counts zero hours. */
+export const attended = (s: string | undefined) => s === "PRESENT" || s === "LATE";
+
+/** The EQISS biweekly code for a day's status: absent and excused → A, holiday → H, sick → S; attended → none. */
+export function biweeklyCodeFor(status: string | undefined): "" | "A" | "H" | "S" {
+  if (status === "ABSENT" || status === "EXCUSED") return "A";
+  if (status === "HOLIDAY") return "H";
+  if (status === "SICK") return "S";
+  return "";
+}
+
+/** The day status for an EQISS biweekly code (the reverse of biweeklyCodeFor). */
+export const statusForBiweeklyCode = (code: string): "ABSENT" | "HOLIDAY" | "SICK" | null =>
+  code === "A" ? "ABSENT" : code === "H" ? "HOLIDAY" : code === "S" ? "SICK" : null;

@@ -12,16 +12,16 @@ type Act = (prev: ActionState) => Promise<ActionState>;
 type SignAct = (prev: ActionState, fd: FormData) => Promise<ActionState>;
 
 const CODE_VALID_MS = 10 * 60_000;
-const STATUS_TONE = { PRESENT: "pine", LATE: "marigold", ABSENT: "brick", EXCUSED: "neutral", HOLIDAY: "neutral" } as const;
-const STATUS_LABEL = { PRESENT: "Present", LATE: "Late", ABSENT: "Absent", EXCUSED: "Excused", HOLIDAY: "Holiday" } as const;
+const STATUS_TONE = { PRESENT: "pine", LATE: "marigold", ABSENT: "brick", EXCUSED: "neutral", HOLIDAY: "neutral", SICK: "neutral" } as const;
+const STATUS_LABEL = { PRESENT: "Present", LATE: "Late", ABSENT: "Absent", EXCUSED: "Excused", HOLIDAY: "Holiday", SICK: "Sick" } as const;
 
 /**
  * The live attendance sheet for one class day: the 10-minute check-in code, every student's check-in,
  * time in/out and hours as they happen, the day's totals, and the instructor's daily signature.
  * Refreshes every 3 seconds while visible. Admins see the same board (they don't sign).
  */
-export function LiveDayBoard({ classId, date, canSign, viewerName, start, close, complete, sign }: {
-  classId: string; date: string; canSign: boolean; viewerName: string;
+export function LiveDayBoard({ classId, date, canSign, viewerName, start, close, complete, sign, checkInEnabled = false }: {
+  classId: string; date: string; canSign: boolean; viewerName: string; checkInEnabled?: boolean;
   start: Act; close: Act; complete: Act; sign: SignAct;
 }) {
   const router = useRouter();
@@ -61,7 +61,7 @@ export function LiveDayBoard({ classId, date, canSign, viewerName, start, close,
   const t = b.totals;
   const open = b.checkIn.open && msLeft > 0;
   const ago = updatedAt ? Math.max(0, Math.round((Date.now() - updatedAt) / 1000)) : null;
-  const showCodeControls = b.today && b.running && b.rows.length > 0 && !b.signoff;
+  const showCodeControls = checkInEnabled && b.today && b.running && b.rows.length > 0 && !b.signoff;
 
   return (
     <section id="live" aria-labelledby="live-title" className="mb-6 rounded-lg border border-line bg-white">
@@ -136,9 +136,9 @@ export function LiveDayBoard({ classId, date, canSign, viewerName, start, close,
           )
         )}
 
-        <RosterTable rows={b.rows} />
+        {checkInEnabled && <RosterTable rows={b.rows} />}
 
-        <DayFooter b={b} canSign={canSign} viewerName={viewerName} sign={sign} pending={pending}
+        <DayFooter b={b} canSign={canSign} checkInEnabled={checkInEnabled} viewerName={viewerName} sign={sign} pending={pending}
           onComplete={() => run(complete, b.today
             ? "Complete today now? Students who haven't checked in are marked absent, and students who checked in but didn't fill out get their time out set to now. Check-in closes."
             : "Complete this day? Students with no mark are marked absent, and students who didn't fill out get their time out set to the class end time.")} />
@@ -192,8 +192,8 @@ function RosterTable({ rows }: { rows: BoardRow[] }) {
   );
 }
 
-function DayFooter({ b, canSign, viewerName, sign, pending, onComplete }: {
-  b: Board; canSign: boolean; viewerName: string; sign: SignAct; pending: boolean; onComplete: () => void;
+function DayFooter({ b, canSign, viewerName, sign, pending, onComplete, checkInEnabled }: {
+  b: Board; canSign: boolean; viewerName: string; sign: SignAct; pending: boolean; onComplete: () => void; checkInEnabled: boolean;
 }) {
   const t = b.totals;
   const needsCompleting = t.pending > 0 || t.unmarked > 0;
@@ -213,7 +213,7 @@ function DayFooter({ b, canSign, viewerName, sign, pending, onComplete }: {
       )}
       {b.signoff && !b.signoff.current && <Alert tone="warning">Marks changed after this day was signed. The instructor needs to review and sign again.</Alert>}
 
-      {needsCompleting && (!b.today || b.checkIn.rounds > 0) && (
+      {checkInEnabled && needsCompleting && (!b.today || b.checkIn.rounds > 0) && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-md bg-mist p-3">
           <p className="text-sm">{b.signBlockers.join(" ")}</p>
           <button type="button" disabled={pending} onClick={onComplete} className={buttonClass("secondary")}>{pending ? "Working..." : "Complete the day"}</button>
@@ -227,7 +227,7 @@ function DayFooter({ b, canSign, viewerName, sign, pending, onComplete }: {
             <SignForm key={`${b.date}:${b.signoff?.signedAt ?? ""}`} action={sign} defaultName={viewerName} label="Sign attendance for this day"
               statement={`I confirm the attendance above for ${b.className} on ${b.date} is accurate: ${summary}.`} />
           </div>
-        ) : !needsCompleting ? <Alert tone="info">Before signing: {b.signBlockers.join(" ")}</Alert> : null
+        ) : !needsCompleting || !checkInEnabled ? <Alert tone="info">Before signing: {b.signBlockers.join(" ")}</Alert> : null
       )}
       {!canSign && !b.signoff && b.signBlockers.length === 0 && <p className="text-sm text-slate-600">Ready for the instructor to sign: {summary}.</p>}
     </div>

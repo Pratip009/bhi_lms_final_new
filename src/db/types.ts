@@ -44,7 +44,7 @@ export type PaymentRequest = {
   cancelReason?: string | null;
 };
 export type EnrollmentStatus = "ACTIVE" | "COMPLETED" | "WITHDRAWN" | "TRANSFERRED";
-export type AttendanceStatus = "PRESENT" | "ABSENT" | "LATE" | "EXCUSED" | "HOLIDAY";
+export type AttendanceStatus = "PRESENT" | "ABSENT" | "LATE" | "EXCUSED" | "HOLIDAY" | "SICK";
 export type ReportStatus = "DRAFT" | "SUBMITTED";
 export type FundingProgram = Category | "MIXED";
 
@@ -187,6 +187,10 @@ export type Klass = {
   sessionEnd?: string | null;
   breakStart?: string | null;
   breakEnd?: string | null;
+  /** Students check in with a code on their phone (optional; off unless an admin or instructor turns it on). */
+  checkInEnabled?: boolean;
+  /** A student arriving more than this many minutes after the class start time is late (default 10). */
+  lateAfterMinutes?: number | null;
   createdAt: Date;
 };
 

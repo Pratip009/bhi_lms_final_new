@@ -301,8 +301,8 @@ await mdb.collection("rate_limits").deleteMany({}); // the app allows 10 sign-up
   await admin.action("/admin/students", "assignStudentAction", [{}, fd({ studentId: sid, classId: privClass, fundingMismatch: "on" })]);
   const eid = (await mdb.collection("enrollments").findOne({ studentId: sid, classId: privClass }))._id;
   const d = day(-45);
-  await instClient.action(`/instructor/classes/${privClass}/attendance`, "recordAttendanceAction", [privClass, {}, fd({ date: d, [`status_${eid}`]: "ABSENT", [`hours_${eid}`]: "0" })]);
-  await instClient.action(`/instructor/classes/${privClass}/attendance`, "recordAttendanceAction", [privClass, {}, fd({ date: d, [`status_${eid}`]: "PRESENT", [`hours_${eid}`]: "6" })]);
+  await instClient.action(`/instructor/classes/${privClass}/attendance`, "saveDayAction", [privClass, {}, fd({ date: d, [`status_${eid}`]: "ABSENT" })]);
+  await instClient.action(`/instructor/classes/${privClass}/attendance`, "saveDayAction", [privClass, {}, fd({ date: d, [`status_${eid}`]: "PRESENT", [`timeIn_${eid}`]: "09:00", [`timeOut_${eid}`]: "15:00" })]);
   const logs = await mdb.collection("audit_logs").find({ action: "attendance.record", entityId: privClass, "meta.date": d }).sort({ createdAt: 1 }).toArray();
   const change = logs.at(-1).meta.changes.find((x) => x.enrollmentId === eid);
   assert.equal(change.from.status, "ABSENT"); assert.equal(change.to.status, "PRESENT"); assert.equal(change.to.hours, 6);
@@ -564,8 +564,8 @@ console.log("Student check-in");
   ok("unconfirmed check-ins are flagged to the instructor and the admins");
 
   const today = day(0);
-  const save = (marks) => instClient.action(`/instructor/classes/${privClass}/attendance`, "recordAttendanceAction",
-    [privClass, {}, fd({ date: today, ...Object.fromEntries(Object.entries(marks).flatMap(([e, [st, h]]) => [[`status_${e}`, st], [`hours_${e}`, String(h)]])) })]);
+  const save = (marks) => instClient.action(`/instructor/classes/${privClass}/attendance`, "saveDayAction",
+    [privClass, {}, fd({ date: today, ...Object.fromEntries(Object.entries(marks).flatMap(([e, [st, h]]) => [[`status_${e}`, st], [`timeIn_${e}`, "09:00"], [`timeOut_${e}`, `${String(9 + h).padStart(2, "0")}:00`]])) })]);
   // Instructor decides Sam wasn't really there (checked in on someone else's phone).
   assert.match((await save({ [s1eid]: ["PRESENT", 4], [st2.eid]: ["ABSENT", 0], [st3.eid]: ["ABSENT", 0] })).text, /saved/);
   assert.doesNotMatch((await instClient.get("/instructor")).text, /Check-ins waiting for you to confirm/);

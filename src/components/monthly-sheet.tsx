@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { loadMonthlySheet } from "@/lib/sheets";
-import { saveDailyEntryAction, signMonthlySheetAction } from "@/lib/actions/sheets";
+import { saveDailyEntryAction, signMonthlySheetAction, signMyMonthAction } from "@/lib/actions/sheets";
 import { ATTENDANCE_LABEL } from "@/lib/queries";
 import { Alert, Badge, Card, cx } from "./ui";
 import { timeLocal } from "@/lib/dates";
@@ -9,7 +9,7 @@ import { PrintButton, SignForm } from "./sign-form";
 
 type Sheet = NonNullable<Awaited<ReturnType<typeof loadMonthlySheet>>>;
 const weekdayShort = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString("en-US", { weekday: "short", timeZone: "UTC" });
-const tone = { PRESENT: "pine", LATE: "marigold", ABSENT: "brick", EXCUSED: "neutral", HOLIDAY: "neutral" } as const;
+const tone = { PRESENT: "pine", LATE: "marigold", ABSENT: "brick", EXCUSED: "neutral", HOLIDAY: "neutral", SICK: "neutral" } as const;
 
 /**
  * DFS / Private monthly attendance sheet, laid out like the handwritten sheet: one row per day with
@@ -79,6 +79,15 @@ export function MonthlySheet({ sheet, enrollmentId, month, months, basePath, mod
           </div>
         )}
       </Card>
+      {mode === "VIEW" && (() => {
+        const unsigned = sheet.rows.filter((r) => r.record && (r.record.status === "PRESENT" || r.record.status === "LATE") && !r.record.studentSignature).length;
+        return unsigned > 0 ? (
+          <Card title="Your signature" className="print:hidden">
+            <SignForm action={signMyMonthAction.bind(null, enrollmentId, month)} defaultName={viewerName} label={`Sign ${unsigned} day${unsigned === 1 ? "" : "s"}`}
+              statement={`I confirm I attended on the ${unsigned} day${unsigned === 1 ? "" : "s"} shown above that ${unsigned === 1 ? "has" : "have"} no signature yet, at the times shown.`} />
+          </Card>
+        ) : null;
+      })()}
       <Card title="Instructor sign-off">
         {sheet.signoff ? (
           <div className="mb-4">

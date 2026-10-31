@@ -51,6 +51,7 @@ export default async function InstructorClass({ params, searchParams }: { params
           settings={{
             classroomUrl: klass.classroomUrl ?? "", classroomSentAt: klass.classroomSentAt ? `${localDateOf(klass.classroomSentAt)} ${timeLocal(klass.classroomSentAt)}` : null,
             sessionStart: klass.sessionStart ?? "", sessionEnd: klass.sessionEnd ?? "", breakStart: klass.breakStart ?? "", breakEnd: klass.breakEnd ?? "",
+              checkInEnabled: !!klass.checkInEnabled, lateAfterMinutes: klass.lateAfterMinutes ?? null,
           }} />
       </Card>
       <form className="mb-4 flex items-center gap-2 text-sm">

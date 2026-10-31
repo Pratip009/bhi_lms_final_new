@@ -93,7 +93,7 @@ export async function activeCountsByClass(): Promise<Map<string, number>> {
 /** Escapes user text for use inside a case-insensitive $regex. */
 export const regexSafe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-export const ATTENDANCE_LABEL: Record<string, string> = { PRESENT: "Present", ABSENT: "Absent", LATE: "Late", EXCUSED: "Excused", HOLIDAY: "Holiday" };
+export const ATTENDANCE_LABEL: Record<string, string> = { PRESENT: "Present", ABSENT: "Absent", LATE: "Late", EXCUSED: "Excused", HOLIDAY: "Holiday", SICK: "Sick" };
 
 export type AttendanceSearch = { classId?: string; studentId?: string; from?: string; to?: string; limit?: number };
 

@@ -13,7 +13,7 @@ function StatusPicker({ value }: { value?: string }) {
     <fieldset>
       <legend className="mb-1.5 text-sm font-medium">Status</legend>
       <div className="flex flex-wrap gap-1">
-        {[["PRESENT", "Present"], ["LATE", "Late"], ["ABSENT", "Absent"], ["HOLIDAY", "Holiday"], ["EXCUSED", "Excused"]].map(([v, l]) => (
+        {[["PRESENT", "Present"], ["LATE", "Late"], ["ABSENT", "Absent"], ["SICK", "Sick"], ["HOLIDAY", "Holiday"], ["EXCUSED", "Excused"]].map(([v, l]) => (
           <label key={v} className="cursor-pointer rounded border border-line px-2 py-1 text-xs has-[:checked]:border-pine-700 has-[:checked]:bg-pine-700 has-[:checked]:text-white">
             <input type="radio" name="status" value={v} defaultChecked={(value ?? "PRESENT") === v} className="sr-only" />{l}
           </label>
