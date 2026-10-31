@@ -62,15 +62,27 @@ const nextMonth = (m: string) => {
 
 // ---------- EQISS / One-Stop: biweekly ITA report ----------
 
-export function biweeklyPeriodsFor(klass: { startDate: string; endDate: string }) {
-  const today = todayLocal();
-  const until = today < klass.endDate ? today : klass.endDate;
-  return periodsBetween(klass.startDate, until).reverse();
+/**
+ * Where a student's two-week periods are counted from: the start of the first section they joined in
+ * this course. A student moved to another section mid-way keeps the same Week 1 / Week 2 boundaries,
+ * so no fortnight is split differently on two reports.
+ */
+export async function periodAnchor(enrollment: Pick<Enrollment, "studentId" | "courseId" | "classId">): Promise<string> {
+  const { enrollments, classes } = await cols();
+  const ids = (await enrollments.find({ studentId: enrollment.studentId, courseId: enrollment.courseId }, { projection: { classId: 1 } }).toArray()).map((e) => e.classId);
+  const ks = await classes.find({ _id: { $in: [...new Set([...ids, enrollment.classId])] } }, { projection: { startDate: 1 } }).toArray();
+  return ks.map((k) => k.startDate).sort()[0] ?? "";
 }
 
-export const currentPeriodFor = (klass: { startDate: string; endDate: string }) => {
+export function biweeklyPeriodsFor(klass: { startDate: string; endDate: string }, anchor = klass.startDate) {
   const today = todayLocal();
-  return periodStartFor(klass.startDate, today < klass.endDate ? (today < klass.startDate ? klass.startDate : today) : klass.endDate);
+  const until = today < klass.endDate ? today : klass.endDate;
+  return periodsBetween(anchor, until).filter((p) => periodEnd(p) >= klass.startDate).reverse();
+}
+
+export const currentPeriodFor = (klass: { startDate: string; endDate: string }, anchor = klass.startDate) => {
+  const today = todayLocal();
+  return periodStartFor(anchor, today < klass.endDate ? (today < klass.startDate ? klass.startDate : today) : klass.endDate);
 };
 
 /**
@@ -95,7 +107,7 @@ export async function getOrCreateBiweekly(enrollment: Enrollment, periodStart: s
   const row = await getClassWithCourse(enrollment.classId);
   if (!row) return null;
   const { klass, course } = row;
-  if (periodStart !== periodStartFor(klass.startDate, periodStart)) return null; // not a valid period boundary
+  if (periodStart !== periodStartFor((await periodAnchor(enrollment)) || klass.startDate, periodStart)) return null; // not a valid period boundary
   const previous = await biweeklySheets.find({ studentId: enrollment.studentId, courseId: klass.courseId }).sort({ periodStart: -1 }).limit(1).next();
   const app = await applications.findOne({ studentId: enrollment.studentId }, { projection: { county: 1 } });
   const dates = periodDates(periodStart);
@@ -151,7 +163,7 @@ export async function syncBiweeklyDay(
 ): Promise<boolean> {
   const row = await getClassWithCourse(enrollment.classId);
   if (!row) return false;
-  const periodStart = periodStartFor(row.klass.startDate, date);
+  const periodStart = periodStartFor((await periodAnchor(enrollment)) || row.klass.startDate, date);
   const { biweeklySheets } = await cols();
   for (let attempt = 0; attempt < 3; attempt++) {
     const sheet = await getOrCreateBiweekly(enrollment, periodStart);

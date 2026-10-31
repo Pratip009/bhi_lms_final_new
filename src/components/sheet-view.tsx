@@ -4,7 +4,7 @@ import { cols } from "@/db";
 import { getVisibleEnrollment, ForbiddenError } from "@/lib/authz";
 import { thisMonthLocal } from "@/lib/dates";
 import { usersById } from "@/lib/queries";
-import { biweeklyPeriodsFor, biweeklyTotals, currentPeriodFor, getOrCreateBiweekly, loadMonthlySheet, sheetFormatFor, sheetMonths } from "@/lib/sheets";
+import { biweeklyPeriodsFor, biweeklyTotals, currentPeriodFor, getOrCreateBiweekly, loadMonthlySheet, periodAnchor, sheetFormatFor, sheetMonths } from "@/lib/sheets";
 import { periodStartFor } from "@/lib/timesheet";
 import { getClassWithCourse } from "@/lib/queries";
 import { BiweeklySheet } from "./biweekly-sheet";
@@ -42,8 +42,9 @@ export async function SheetView({ user, enrollment, sp, basePath, back }: {
   );
 
   if (format === "BIWEEKLY") {
-    const periods = biweeklyPeriodsFor(row.klass);
-    const wanted = sp.period && /^\d{4}-\d{2}-\d{2}$/.test(sp.period) ? periodStartFor(row.klass.startDate, sp.period) : currentPeriodFor(row.klass);
+    const anchor = (await periodAnchor(enrollment)) || row.klass.startDate;
+    const periods = biweeklyPeriodsFor(row.klass, anchor);
+    const wanted = sp.period && /^\d{4}-\d{2}-\d{2}$/.test(sp.period) ? periodStartFor(anchor, sp.period) : currentPeriodFor(row.klass, anchor);
     const period = periods.includes(wanted) ? wanted : periods[0];
     if (!period) return <>{header}<p className="text-sm text-slate-600">The program hasn't started yet. The first two-week report opens on {row.klass.startDate}.</p></>;
     const sheet = await getOrCreateBiweekly(enrollment, period);
