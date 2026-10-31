@@ -1,3 +1,6 @@
+import { loadEnvConfig } from "@next/env";
+// Read .env, .env.local etc. the same way the website does, so `npm run db:...` sees MONGODB_URI.
+loadEnvConfig(process.cwd());
 import { MongoClient, type Db } from "mongodb";
 import { randomUUID } from "node:crypto";
 import { ensureIndexes } from "./indexes";
