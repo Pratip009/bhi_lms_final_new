@@ -45,7 +45,15 @@ export async function ensureIndexes(db: Db) {
   await idx("classes", { code: 1 }, { unique: true, name: "classes_code_uq" });
   await idx("classes", { courseId: 1 });
   await idx("classes", { "instructors.instructorId": 1 });
-  await idx("enrollments", { studentId: 1, classId: 1 }, { unique: true, name: "enrollments_student_class_uq" });
+  // One ACTIVE enrollment per student and section; earlier (ended) periods in the same section are separate rows.
+  await db.collection("enrollments").dropIndex("enrollments_student_class_uq").catch(() => undefined);
+  try {
+    await idx("enrollments", { studentId: 1, classId: 1 }, { unique: true, name: "enrollments_student_class_active_uq", partialFilterExpression: { status: "ACTIVE" } });
+  } catch (e) {
+    if ((e as { code?: number }).code !== 238) throw e;
+    console.warn("Partial index on enrollments not supported by this server; using a non-unique index.");
+    await idx("enrollments", { studentId: 1, classId: 1 }, { name: "enrollments_student_class" });
+  }
   await idx("enrollments", { classId: 1, status: 1 });
   await idx("class_sessions", { classId: 1, date: 1 }, { unique: true, name: "class_sessions_class_date_uq" });
   await idx("attendance_checkins", { classId: 1, date: 1 }, { unique: true, name: "attendance_checkins_class_date_uq" });

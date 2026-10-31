@@ -10,7 +10,7 @@ import { todayLocal } from "@/lib/dates";
  * none yet, a "General section" is created so approval always results in a working enrollment.
  * Admins can then create more sections, move students and merge sections.
  *
- * History rule: rows are never deleted or re-pointed. Moving a student ends the old enrollment
+ * History rule: rows are never deleted, re-pointed or reactivated. Moving a student ends the old enrollment
  * (TRANSFERRED, with a link to the new one) and starts a new one. Attendance, monthly sign-offs,
  * biweekly sheets and progress reports stay keyed to the enrollment they were written under, with
  * the instructor who wrote them.
@@ -81,21 +81,20 @@ export async function pickSection(course: Course, category: Category | null): Pr
   return ensureDefaultSection(course);
 }
 
-/** Starts (or reactivates) an enrollment of the student in a section. Returns the enrollment. */
+/**
+ * Starts a new enrollment period of the student in a section and returns it. If the student is already
+ * active in that section, that enrollment is returned unchanged.
+ *
+ * Every period is its own row, including a return to a section the student attended before: earlier
+ * rows keep their own assignment and end dates, attendance and reports. A partial unique index
+ * (student + section, ACTIVE only) stops a double click from starting two periods at once.
+ */
 export async function startEnrollment(studentId: string, klass: Klass, byId: string, movedFrom: string | null = null): Promise<Enrollment> {
   const { enrollments } = await cols();
-  const existing = await enrollments.findOne({ studentId, classId: klass._id });
-  if (existing?.status === "ACTIVE") return existing;
-  const now = new Date();
-  if (existing) {
-    await enrollments.updateOne(
-      { _id: existing._id },
-      { $set: { status: "ACTIVE", endedAt: null, assignedById: byId, assignedAt: now, courseId: klass.courseId, movedFromEnrollmentId: movedFrom, endReason: null } },
-    );
-    return { ...existing, status: "ACTIVE", endedAt: null, assignedById: byId, assignedAt: now };
-  }
+  const active = await enrollments.findOne({ studentId, classId: klass._id, status: "ACTIVE" });
+  if (active) return active;
   const row: Enrollment = {
-    _id: newId(), studentId, classId: klass._id, courseId: klass.courseId, status: "ACTIVE", assignedById: byId, assignedAt: now, endedAt: null,
+    _id: newId(), studentId, classId: klass._id, courseId: klass.courseId, status: "ACTIVE", assignedById: byId, assignedAt: new Date(), endedAt: null,
     movedFromEnrollmentId: movedFrom, movedToEnrollmentId: null, endReason: null,
   };
   try {
@@ -103,7 +102,7 @@ export async function startEnrollment(studentId: string, klass: Klass, byId: str
     return row;
   } catch (e) {
     if (!isDuplicateKey(e)) throw e; // a double click inserted it first
-    return (await enrollments.findOne({ studentId, classId: klass._id }))!;
+    return (await enrollments.findOne({ studentId, classId: klass._id, status: "ACTIVE" }))!;
   }
 }
 

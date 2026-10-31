@@ -42,12 +42,19 @@ export async function approveApplication(applicationId: string, decidedById: str
   if (!res.modifiedCount) return { ok: false, error: "Only pending applications can be approved. Reload to see the latest status." };
   await audit(via === "admin" ? decidedById : null, "application.approve", "application", applicationId, { courseId: course._id, via });
 
+  // Approval and course placement are one step: if placement fails, the approval is undone, so a
+  // student is never left "approved" without a class.
   let placed;
   try {
     placed = await enrollInCourse(app.studentId, course, app.category, decidedById);
   } catch (e) {
     console.error("[approve] placement failed", e);
-    return { ok: false, error: `Approved, but the student couldn't be placed in ${course.name}. Assign a section from the student's page.` };
+    await applications.updateOne(
+      { _id: applicationId, status: "APPROVED", decidedAt: now },
+      { $set: { status: app.status, decidedAt: null, decidedById: null, updatedAt: new Date() } },
+    );
+    await audit(via === "admin" ? decidedById : null, "application.approve_undone", "application", applicationId, { courseId: course._id, reason: "placement failed" });
+    return { ok: false, error: `The student couldn't be placed in ${course.name}, so the application was not approved. Try again in a minute; if it keeps failing, check that the course has an open class.` };
   }
   await audit(via === "admin" ? decidedById : null, "enrollment.assign", "class", placed.klass._id, { studentId: app.studentId, via: `approval:${via}`, courseId: course._id });
   const emailed = await trySend(() => sendDecisionEmail(student.email, student.name, "APPROVED", undefined, course.name));

@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { cols, newId, isDuplicateKey, type Category, type User } from "@/db";
-import { moveEnrollment, fundingFits } from "@/lib/placement";
+import { moveEnrollment, fundingFits, startEnrollment } from "@/lib/placement";
 import { formatUsd, parseUsdToCents } from "@/lib/payment";
 import { approveApplication, REVIEWABLE } from "@/lib/approval";
 import { closeCheckout, settleCheckoutSession, stripe, stripeEnabled } from "@/lib/tuition";
@@ -352,28 +352,13 @@ export async function assignStudentAction(_: ActionState, fd: FormData): Promise
     };
   }
 
-  const existing = await enrollments.findOne({ studentId, classId });
-  if (existing?.status === "ACTIVE") return { error: "The student is already in this class." };
+  if (await enrollments.findOne({ studentId, classId, status: "ACTIVE" }, { projection: { _id: 1 } })) return { error: "The student is already in this class." };
   const active = await enrollments.countDocuments({ classId, status: "ACTIVE" });
   if (active >= klass.capacity && fd.get("overCapacity") !== "on") {
     return { error: `This class is full (${klass.capacity}). Tick "Allow over capacity" to add anyway.` };
   }
-
-  if (existing) {
-    const res = await enrollments.updateOne(
-      { _id: existing._id, status: { $ne: "ACTIVE" } },
-      { $set: { status: "ACTIVE", endedAt: null, assignedById: admin._id, assignedAt: new Date() } },
-    );
-    if (!res.modifiedCount) return { error: "The student is already in this class." };
-  } else {
-    try {
-      await enrollments.insertOne({ _id: newId(), studentId, classId, courseId: klass.courseId, status: "ACTIVE", assignedById: admin._id, assignedAt: new Date(), endedAt: null });
-    } catch (e) {
-      // The unique (studentId, classId) index stops a duplicate from a double click.
-      if (isDuplicateKey(e)) return { error: "The student is already in this class." };
-      throw e;
-    }
-  }
+  // Always a new enrollment period (a returning student's earlier dates and records are kept).
+  await startEnrollment(studentId, klass, admin._id);
 
   await audit(admin._id, "enrollment.assign", "class", classId, { studentId, fundingOverride: !classOk || !courseOk });
   const student = await users.findOne({ _id: studentId });
