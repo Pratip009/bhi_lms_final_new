@@ -1,6 +1,6 @@
 # QA fixes — 31 October 2026
 
-Base: `9c4b4cb` (26 Oct 2026). 13 commits, one per topic, so each can be reviewed and merged separately (`git log 9c4b4cb..HEAD`).
+Base: `9c4b4cb` (26 Oct 2026). 15 commits, one per topic, so each can be reviewed and merged separately (`git log 9c4b4cb..HEAD`).
 Checked with: `npm run build` (passes), `npx tsc --noEmit` (clean, including tests), `npm test` (39/39 pass).
 **Not run:** `test:e2e` and `test:regressions` (need a database and server); Stripe, email and PDF output (need staging). See TESTING.md.
 
