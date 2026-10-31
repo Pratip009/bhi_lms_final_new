@@ -12,12 +12,11 @@ export const metadata: Metadata = { title: "Applications" };
 
 const FILTERS: { key: string; label: string; statuses: ApplicationStatus[] | null; payment?: "TO_REQUEST" | "REQUESTED" }[] = [
   { key: "PENDING", label: "Pending review", statuses: ["SUBMITTED", "RESUBMITTED"] },
-  { key: "PAYMENT", label: "Private: payment to request", statuses: ["SUBMITTED", "RESUBMITTED"], payment: "TO_REQUEST" },
-  { key: "AWAITING_PAYMENT", label: "Private: awaiting payment", statuses: ["SUBMITTED", "RESUBMITTED"], payment: "REQUESTED" },
+  { key: "PAYMENT", label: "Private: not paid yet", statuses: ["DRAFT", "SUBMITTED", "RESUBMITTED"], payment: "TO_REQUEST" },
   { key: "CORRECTIONS_REQUESTED", label: "Resubmission required", statuses: ["CORRECTIONS_REQUESTED"] },
   { key: "APPROVED", label: "Approved", statuses: ["APPROVED"] },
   { key: "REJECTED", label: "Rejected", statuses: ["REJECTED"] },
-  { key: "DRAFT", label: "Draft (in progress)", statuses: ["DRAFT"] },
+  { key: "DRAFT", label: "Not submitted yet", statuses: ["DRAFT"] },
   { key: "ALL", label: "All", statuses: null },
 ];
 const PAGE = 50;
@@ -33,7 +32,7 @@ export default async function ApplicationsPage({ searchParams }: { searchParams:
   const { applications, users, courses } = await cols();
   const where: Filter<Application> = {};
   if (filter.statuses) where.status = { $in: filter.statuses };
-  if (filter.payment) Object.assign(where, { category: "PRIVATE", paymentStatus: filter.payment === "REQUESTED" ? "REQUESTED" : "PENDING" });
+  if (filter.payment) Object.assign(where, { category: "PRIVATE", paymentStatus: filter.payment === "REQUESTED" ? "REQUESTED" : { $in: ["PENDING", "REQUESTED"] } });
   const category = CATEGORIES.find((c) => c === sp.category);
   if (category && !filter.payment) where.category = category;
   const county = COUNTIES.find((c) => c === sp.county);

@@ -29,17 +29,17 @@ test("Non-Private tracks (EQISS, DFS) never receive fee templates, even if misco
 
 const COMMON = ["student_data", "educational_background", "background_check", "emergency_medical", "workforce_registration", "grievance_policy", "photo_release"];
 
-test("every track gets the 8 Common Forms once, in the packet order", () => {
+test("every track gets the 7 Common Forms once, in the packet order", () => {
   for (const c of ["PRIVATE", "EQISS", "DFS"] as const) {
     const keys = templatesFor(c).map((t) => t.key);
-    assert.deepEqual(keys.slice(0, 8), COMMON, c);
+    assert.deepEqual(keys.slice(0, 7), COMMON, c);
     assert.equal(new Set(keys).size, keys.length, `${c}: duplicate templates`);
   }
 });
 
 test("Private gets Private Forms; Non-Private gets the Non-Private agreement only", () => {
-  assert.deepEqual(templatesFor("PRIVATE").slice(8).map((t) => t.key), ["private_agreement_1", "private_agreement_2", "refund_schedule"]);
-  for (const c of ["EQISS", "DFS"] as const) assert.deepEqual(templatesFor(c).slice(8).map((t) => t.key), ["nonprivate_agreement"]);
+  assert.deepEqual(templatesFor("PRIVATE").slice(7).map((t) => t.key), ["private_agreement_1", "private_agreement_2", "refund_schedule"]);
+  for (const c of ["EQISS", "DFS"] as const) assert.deepEqual(templatesFor(c).slice(7).map((t) => t.key), ["nonprivate_agreement"]);
   assert.ok(templatesFor("PRIVATE").filter((t) => t.group === "PRIVATE").every((t) => t.containsFees));
 });
 
@@ -167,11 +167,14 @@ test("form schema enforces required fields and confirmations", () => {
   const grievance = TEMPLATES.find((t) => t.key === "grievance_policy")!;
   const bad = schemaFor(grievance).safeParse(coerceRaw(grievance, {}));
   assert.equal(bad.success, false);
-  const good = schemaFor(grievance).safeParse(coerceRaw(grievance, { acknowledged: "on" }));
+  const good = schemaFor(grievance).safeParse(coerceRaw(grievance, { studentName: "Ana Diaz" }));
   assert.equal(good.success, true);
   const personal = TEMPLATES.find((t) => t.key === "student_data")!;
-  const r = schemaFor(personal).safeParse({ legalName: "A", dateOfBirth: "not-a-date", phone: "1", street: "x", city: "x", state: "x", zip: "1" });
+  const r = schemaFor(personal).safeParse(coerceRaw(personal, { orientation: "on", legalName: "A", dateOfBirth: "not-a-date", ssn: "123456789", cellPhone: "1", email: "a@gmail.com", street: "x", city: "x", state: "x", zip: "1" }));
   assert.equal(r.success, false);
+  assert.ok(!r.success && r.error.issues.some((i) => i.path[0] === "dateOfBirth"));
+  const noOrientation = schemaFor(personal).safeParse(coerceRaw(personal, { legalName: "A", dateOfBirth: "2000-01-01", ssn: "123456789", cellPhone: "1", email: "a@gmail.com", street: "x", city: "x", state: "x", zip: "1" }));
+  assert.ok(!noOrientation.success && noOrientation.error.issues.some((i) => i.path[0] === "orientation"), "the mandatory orientation must be acknowledged");
 });
 
 test("file types are detected from content", () => {
@@ -236,43 +239,47 @@ test("attendance audit records before and after values, and skips unchanged rows
   assert.equal(attendanceChanges(before, { e1: { status: "ABSENT", hours: 0, note: "" } }).length, 0);
 });
 
-// ---- Student check-in ----
-import { codeFor, codeMatches, currentCode, isOpen, statusAt, sharedDevices, unconfirmed, CODE_PERIOD_SECONDS } from "../src/lib/checkin";
+// ---- Student check-in (optional per class; codes work for 10 minutes) ----
+import { checkInStatus, codeFor, codeMatches, isOpen, msLeft, statusAt, sharedDevices, CODE_VALID_MINUTES } from "../src/lib/checkin";
 
 const SECRET = "x".repeat(40);
 const sess = { _id: "s1", seed: "seed-1" };
 
-test("check-in codes are 6 digits and change every period", () => {
-  const t0 = new Date(Math.floor(Date.now() / 30_000) * 30_000 + 1000);
-  const a = currentCode(SECRET, sess, t0);
-  const b = currentCode(SECRET, sess, new Date(t0.getTime() + CODE_PERIOD_SECONDS * 1000));
-  assert.match(a.code, /^\d{6}$/);
-  assert.notEqual(a.code, b.code);
-  assert.ok(a.secondsLeft >= 1 && a.secondsLeft <= CODE_PERIOD_SECONDS);
+test("check-in codes are 6 digits and match only the current code", () => {
+  const code = codeFor(SECRET, sess);
+  assert.match(code, /^\d{6}$/);
+  assert.ok(codeMatches(SECRET, sess, code));
+  assert.ok(!codeMatches(SECRET, sess, "12345"));
+  assert.ok(!codeMatches(SECRET, sess, "abcdef"));
+  assert.ok(!codeMatches(SECRET, { ...sess, seed: "seed-2" }, code), "a new code replaces the old one");
 });
 
-test("a code works now and for one more period, then expires", () => {
-  const t0 = new Date(Math.floor(Date.now() / 30_000) * 30_000 + 1000);
-  const { code } = currentCode(SECRET, sess, t0);
-  assert.ok(codeMatches(SECRET, sess, code, t0));
-  assert.ok(codeMatches(SECRET, sess, code, new Date(t0.getTime() + 30_000)));
-  assert.ok(!codeMatches(SECRET, sess, code, new Date(t0.getTime() + 60_000)));
-  assert.ok(!codeMatches(SECRET, sess, "12345", t0));
-  assert.ok(!codeMatches(SECRET, sess, "abcdef", t0));
+test("codes differ per session, per new code and per secret", () => {
+  assert.notEqual(codeFor(SECRET, sess), codeFor(SECRET, { ...sess, _id: "s2" }));
+  assert.notEqual(codeFor(SECRET, sess), codeFor(SECRET, { ...sess, seed: "seed-2" }));
+  assert.notEqual(codeFor(SECRET, sess), codeFor("y".repeat(40), sess));
 });
 
-test("codes differ per session, per reopening and per secret", () => {
-  const w = 123456;
-  assert.notEqual(codeFor(SECRET, sess, w), codeFor(SECRET, { ...sess, _id: "s2" }, w));
-  assert.notEqual(codeFor(SECRET, sess, w), codeFor(SECRET, { ...sess, seed: "seed-2" }, w));
-  assert.notEqual(codeFor(SECRET, sess, w), codeFor("y".repeat(40), sess, w));
+test("a code works for 10 minutes", () => {
+  const now = new Date();
+  const s = { closedAt: null, expiresAt: new Date(now.getTime() + CODE_VALID_MINUTES * 60_000) };
+  assert.ok(isOpen(s, now));
+  assert.ok(msLeft(s, now) > 0);
+  assert.ok(!isOpen(s, new Date(now.getTime() + CODE_VALID_MINUTES * 60_000 + 1)));
 });
 
-test("lateness is measured from the first opening", () => {
+test("without a class start time, lateness is measured from the first code", () => {
   const openedAt = new Date("2026-10-13T13:00:00Z");
   const s = { openedAt, lateAfterMinutes: 10 };
   assert.equal(statusAt(s, new Date("2026-10-13T13:10:00Z")), "PRESENT");
   assert.equal(statusAt(s, new Date("2026-10-13T13:10:01Z")), "LATE");
+});
+
+test("with a class start time, lateness is measured from the start time plus the grace minutes", () => {
+  assert.equal(checkInStatus("09:10", "09:00", 10, "LATE"), "PRESENT");
+  assert.equal(checkInStatus("09:11", "09:00", 10, "PRESENT"), "LATE");
+  assert.equal(checkInStatus("09:05", "09:00", 0, "PRESENT"), "LATE");
+  assert.equal(checkInStatus("09:30", null, 10, "PRESENT"), "PRESENT", "falls back when the class has no start time");
 });
 
 test("check-in closes when closed or expired", () => {
@@ -289,18 +296,21 @@ test("two students on one phone are both flagged", () => {
   assert.equal(flags.has("c"), false);
 });
 
-test("check-ins stay unconfirmed until the saved sheet deals with them", () => {
-  const t = (m: number) => new Date(Date.UTC(2026, 9, 13, 13, m));
-  const entries = { a: { at: t(5) }, b: { at: t(5) }, c: { at: t(5) }, d: { at: t(5) } };
-  assert.deepEqual(unconfirmed(entries, undefined), ["a", "b", "c", "d"]);
-  assert.deepEqual(
-    unconfirmed(entries, {
-      a: { status: "PRESENT", updatedAt: t(1) }, // counted
-      b: { status: "ABSENT", updatedAt: t(1) }, // sheet saved before the check-in: needs review
-      c: { status: "ABSENT", updatedAt: t(9) }, // instructor decided after seeing the check-in
-    }),
-    ["b", "d"],
-  );
+// ---- Daily statuses and the EQISS report ----
+import { attended, biweeklyCodeFor, statusForBiweeklyCode } from "../src/lib/attendance-rules";
+
+test("day statuses map to EQISS codes and back", () => {
+  assert.equal(biweeklyCodeFor("ABSENT"), "A");
+  assert.equal(biweeklyCodeFor("EXCUSED"), "A");
+  assert.equal(biweeklyCodeFor("HOLIDAY"), "H");
+  assert.equal(biweeklyCodeFor("SICK"), "S");
+  assert.equal(biweeklyCodeFor("PRESENT"), "");
+  assert.equal(biweeklyCodeFor("LATE"), "");
+  assert.equal(statusForBiweeklyCode("S"), "SICK");
+  assert.equal(statusForBiweeklyCode("H"), "HOLIDAY");
+  assert.equal(statusForBiweeklyCode("A"), "ABSENT");
+  assert.equal(statusForBiweeklyCode(""), null);
+  assert.ok(attended("PRESENT") && attended("LATE") && !attended("SICK") && !attended("ABSENT"));
 });
 
 test("rate limit counts the overlap with the previous window", () => {
@@ -308,4 +318,54 @@ test("rate limit counts the overlap with the previous window", () => {
   const estimate = (curr: number, prev: number, elapsed: number) => curr + prev * (1 - elapsed);
   assert.ok(estimate(5, 6, 0.01) > 10);
   assert.ok(estimate(5, 6, 0.99) <= 10); // the old attempts have aged out
+});
+
+// ---- Official enrollment forms (October 2026 packets) ----
+
+test("all Common and Private forms carry the official wording; only the Non-Private agreement is still pending", () => {
+  assert.deepEqual(TEMPLATES.filter((t) => t.pendingOfficialText).map((t) => t.key), ["nonprivate_agreement"]);
+  assert.equal(TEMPLATES.some((t) => t.key === "laptop_receipt"), false, "laptop receipt is signed in person, not online");
+  assert.deepEqual(templatesFor("PRIVATE").map((t) => t.key).slice(7), ["private_agreement_1", "private_agreement_2", "refund_schedule"]);
+});
+
+test("Yes answers on the Background Check need an explanation", () => {
+  const t = TEMPLATES.find((x) => x.key === "background_check")!;
+  const base = { firstName: "Ana", lastName: "Diaz", street: "1 Main St", city: "Jersey City", state: "NJ", zip: "07306", dateOfBirth: "1990-01-01", ssn: "123456789", arrested: "No", abuse: "No", lifestyle: "No" };
+  const ok = schemaFor(t).safeParse(coerceRaw(t, base));
+  assert.ok(ok.success);
+  assert.equal((ok as { data: Record<string, unknown> }).data.ssn, "123-45-6789", "SSNs are stored in one format");
+  const bad = schemaFor(t).safeParse(coerceRaw(t, { ...base, arrested: "Yes" }));
+  assert.ok(!bad.success && bad.error.issues.some((i) => i.path[0] === "explain"));
+  assert.ok(schemaFor(t).safeParse(coerceRaw(t, { ...base, arrested: "Yes", explain: "2005, dismissed" })).success);
+});
+
+test("check-all-that-apply answers are lists limited to the printed options", () => {
+  const t = TEMPLATES.find((x) => x.key === "workforce_registration")!;
+  const raw = coerceRaw(t, { race: ["Asian", "White"], contactBy: "Email" });
+  assert.deepEqual(raw.race, ["Asian", "White"]);
+  assert.deepEqual(raw.contactBy, ["Email"]);
+  const r = schemaFor(t).safeParse(coerceRaw(t, { race: ["Martian"] }));
+  assert.ok(!r.success && r.error.issues.some((i) => i.path[0] === "race"));
+});
+
+test("heading and note lines never store an answer", () => {
+  for (const t of TEMPLATES) {
+    const keys = Object.keys(coerceRaw(t, {}));
+    for (const f of t.fields.filter((x) => x.type === "heading" || x.type === "note")) assert.ok(!keys.includes(f.name), `${t.key}.${f.name}`);
+  }
+});
+
+test("Private forms show the chosen course's fees; Non-Private students never get them", () => {
+  const t = TEMPLATES.find((x) => x.key === "private_agreement_1")!;
+  const body = (t.body as (c: unknown) => string[])({ studentName: "Ana Diaz", course: { name: "Pharmacy Technician", fees: { tuitionCents: 350000, feesCents: 17500, booksCents: 27500, toolsCents: 0, otherCents: 0 } } });
+  assert.ok(body.some((p) => p.includes("Ana Diaz") && p.includes("Pharmacy Technician")));
+  assert.ok(body.some((p) => p.includes("Tuition $3,500") && p.includes("Books $275") && p.includes("other $175")));
+  for (const c of ["EQISS", "DFS"] as const) assert.ok(templatesFor(c).every((x) => !x.containsFees));
+});
+
+test("Private payment comes before the forms", () => {
+  assert.ok(formsBlockedByPayment({ category: "PRIVATE", paymentStatus: "PENDING" }));
+  assert.ok(formsBlockedByPayment({ category: "PRIVATE", paymentStatus: "REQUESTED" }));
+  assert.ok(!formsBlockedByPayment({ category: "PRIVATE", paymentStatus: "PAID" }));
+  assert.ok(!formsBlockedByPayment({ category: "EQISS", paymentStatus: "NOT_REQUIRED" }));
 });
