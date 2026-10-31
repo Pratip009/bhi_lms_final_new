@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-type Row = { name: string; tuition: number; fees: number; books: number; tools: number; other: number; total: number; hours: number; certification: string };
+type Row = { name: string; formerNames?: string[]; tuition: number; fees: number; books: number; tools: number; other: number; total: number; hours: number; certification: string };
 const cents = (usd: number) => Math.round(usd * 100);
 
 /**
@@ -20,7 +20,12 @@ export async function seedCourses(db: Db) {
     const sum = r.tuition + r.fees + r.books + r.tools + r.other;
     if (sum !== r.total) throw new Error(`${r.name}: fees add up to ${sum}, but the total says ${r.total}`);
     const fees = { tuitionCents: cents(r.tuition), feesCents: cents(r.fees), booksCents: cents(r.books), toolsCents: cents(r.tools), otherCents: cents(r.other) };
-    const existing = await courses.findOne({ name: r.name });
+    // A course loaded under an earlier spelling of its name is renamed, never duplicated.
+    let existing = await courses.findOne({ name: r.name });
+    if (!existing && r.formerNames?.length) {
+      existing = await courses.findOne({ name: { $in: r.formerNames } });
+      if (existing) await courses.updateOne({ _id: existing._id }, { $set: { name: r.name } });
+    }
     if (!existing) {
       await courses.insertOne({
         _id: randomUUID() as unknown as never, name: r.name, description: "", fundingPrograms: [], archived: false, createdAt: new Date(),

@@ -117,7 +117,7 @@ The admin home page lists anything still outstanding at the bottom.
 
 1. **Non-Private Enrollment Agreement wording.** Every Common and Private form now has the official wording and fields from the October 2026 packets (`src/lib/forms/templates.ts`). Only `nonprivate_agreement` still has `pendingOfficialText: true`; paste its printed text into `body`, match the fields, set it to `false` and bump `version`.
 2. **EQISS certification statements:** paste the customer and instructor statements from "Equus Timesheet - Updated 2026.docx" into `src/lib/eqiss-text.ts`.
-3. **Course list details to confirm** (`data/bhi-courses.json`): certifications for programs 9–14 are left empty because the shared table looked shifted by one row; which enrollment types may choose each course (all are open to everyone until set); whether the $25 application and $100 registration fees are part of each Total.
+3. **Course list details to confirm** (`data/bhi-courses.json`): certifications for programs 9–15 are left empty because the certification column in the source has one extra entry (the likely correct values are in the file's `note`); the unlabeled line under GED; which enrollment types may choose each course (all are open to everyone until set); whether the $25 application and $100 registration fees are part of each Total.
 4. **Inter-Agency Referral / Status Change Form** and **Social Security card copy:** optional uploads until BHI confirms.
 
 ## Admin controls added in the October 2026 audit

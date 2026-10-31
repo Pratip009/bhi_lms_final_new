@@ -41,6 +41,8 @@ The numbers in brackets refer to the QA checklist.
 - **Amount charged:** the course's Total from the fee table. Are the $25 application and $100 registration fees extra?
 - **Paper fee lines:** Supply = Tools column; Other = Fees + Other columns; Uniforms = $0.
 - **Course availability:** every course is open to every enrollment type until limited on the course page.
-- **Certifications for programs 9–14** are left empty (the table looked shifted by one row).
+- **Certifications for programs 9–15** are left empty: the certification column in BHI_Program_Fee_Structure.pdf has one extra entry (MEDCA at row 9). Moved up one row they read 9 OSHA, 10 NABCEP, 11 Google UI/UX, 12 CDA National Credential, 13 SORA, 14 Completion, 15 GED (see `note` in data/bhi-courses.json).
+- **Unlabeled line under GED** in the fee structure (3,500 / 250 / 0 / 0 / 250 = 4,000, 600 h, GED) is not loaded. Same total as GED, so the Private charge is unaffected.
+- **Currency** is not printed in the fee structure; amounts are treated as US dollars.
 - **Photo Release:** keeps an "I do not give permission" choice.
 - **Background Check:** the paper blanks for the school's name are filled with "Bright Horizon Institute".
