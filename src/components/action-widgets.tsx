@@ -122,13 +122,34 @@ export function AssignInstructorClassForm({ action, classes }: { action: Act; cl
   );
 }
 
-export function CourseForm({ action, values, submitLabel }: { action: Act; values?: { name: string; description: string; fundingPrograms: string[] }; submitLabel: string }) {
+type CourseValues = {
+  name: string; description: string; fundingPrograms: string[]; hours?: number | null; certification?: string | null;
+  fees?: { tuitionCents: number; feesCents: number; booksCents: number; toolsCents: number; otherCents: number } | null;
+};
+const money = (c?: number) => (c ? (c / 100).toFixed(c % 100 ? 2 : 0) : "");
+
+export function CourseForm({ action, values, submitLabel }: { action: Act; values?: CourseValues; submitLabel: string }) {
+  const f = values?.fees;
   return (
     <ActionForm action={action} className="space-y-4">
       <Field name="name" label="Course name" required defaultValue={values?.name} maxLength={120} />
-      <Field name="description" label="Description" type="textarea" rows={3} defaultValue={values?.description} />
+      <Field name="description" label="Description (shown to students)" type="textarea" rows={3} defaultValue={values?.description} />
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field name="hours" label="Hours" inputMode="numeric" defaultValue={values?.hours != null ? String(values.hours) : ""} />
+        <Field name="certification" label="Certification" defaultValue={values?.certification ?? ""} maxLength={200} />
+      </div>
       <fieldset>
-        <legend className="mb-2 text-sm font-medium">Funding programs served <span className="font-normal text-slate-500">(none ticked = open to all)</span></legend>
+        <legend className="mb-2 text-sm font-medium">Private tuition and fees in $ <span className="font-normal text-slate-500">(the total is what a Private student pays online)</span></legend>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+          <Field name="tuition" label="Tuition" inputMode="decimal" defaultValue={money(f?.tuitionCents)} />
+          <Field name="fees" label="Fees" inputMode="decimal" defaultValue={money(f?.feesCents)} />
+          <Field name="books" label="Books" inputMode="decimal" defaultValue={money(f?.booksCents)} />
+          <Field name="tools" label="Tools" inputMode="decimal" defaultValue={money(f?.toolsCents)} />
+          <Field name="other" label="Other" inputMode="decimal" defaultValue={money(f?.otherCents)} />
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend className="mb-2 text-sm font-medium">Who can choose this course <span className="font-normal text-slate-500">(none ticked = everyone)</span></legend>
         <div className="flex flex-wrap gap-3">
           {[["PRIVATE", "Private"], ["EQISS", "Non-Private: EQISS / One-Stop"], ["DFS", "Non-Private: DFS"]].map(([v, l]) => (
             <label key={v} className="flex items-center gap-2 rounded-md border border-line px-3 py-2 text-sm">

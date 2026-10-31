@@ -1,0 +1,21 @@
+{
+  "source": "BHI Program Details and Fee Structure (shared Oct 2026). Amounts in US dollars.",
+  "note": "Certification is left empty for rows 9-14: in the shared table those values appear shifted by one row. Fill them in from the admin Courses page once confirmed.",
+  "courses": [
+    { "name": "Business Analyst", "tuition": 3600, "fees": 0, "books": 150, "tools": 150, "other": 0, "total": 3900, "hours": 200, "certification": "International Institute of Business Analysis (IIBA)" },
+    { "name": "Certified Clinical Medical Assistant", "tuition": 3445, "fees": 0, "books": 100, "tools": 300, "other": 0, "total": 3845, "hours": 350, "certification": "MEDCA" },
+    { "name": "Cisco Network Associate", "tuition": 3500, "fees": 0, "books": 200, "tools": 100, "other": 0, "total": 3800, "hours": 240, "certification": "CISCO" },
+    { "name": "Home Health Aide", "tuition": 660, "fees": 200, "books": 40, "tools": 65, "other": 0, "total": 965, "hours": 76, "certification": "CHHA" },
+    { "name": "Hospitality Management", "tuition": 3600, "fees": 100, "books": 200, "tools": 0, "other": 0, "total": 3900, "hours": 560, "certification": "SERVSAFE" },
+    { "name": "Office Management – Computer Support Basics", "tuition": 3600, "fees": 100, "books": 200, "tools": 0, "other": 0, "total": 3900, "hours": 200, "certification": "COMPTIA A+" },
+    { "name": "Patient Care Technician", "tuition": 3500, "fees": 200, "books": 300, "tools": 0, "other": 0, "total": 4000, "hours": 200, "certification": "MEDCA" },
+    { "name": "Pharmacy Technician", "tuition": 3500, "fees": 175, "books": 275, "tools": 0, "other": 0, "total": 3950, "hours": 300, "certification": "MEDCA" },
+    { "name": "Resident Electrician", "tuition": 3500, "fees": 100, "books": 100, "tools": 200, "other": 0, "total": 3900, "hours": 300, "certification": "" },
+    { "name": "Solar Panel Installer", "tuition": 3600, "fees": 100, "books": 150, "tools": 150, "other": 0, "total": 4000, "hours": 300, "certification": "" },
+    { "name": "Web Page, Digital/Multimedia and Information Resources Design", "tuition": 3600, "fees": 0, "books": 100, "tools": 200, "other": 100, "total": 4000, "hours": 240, "certification": "" },
+    { "name": "Child Development Associate", "tuition": 3600, "fees": 100, "books": 150, "tools": 150, "other": 0, "total": 4000, "hours": 300, "certification": "" },
+    { "name": "Security Officer Training", "tuition": 3500, "fees": 50, "books": 100, "tools": 0, "other": 350, "total": 4000, "hours": 300, "certification": "" },
+    { "name": "English as Second Language", "tuition": 180, "fees": 0, "books": 0, "tools": 0, "other": 135, "total": 315, "hours": 24, "certification": "" },
+    { "name": "GED", "tuition": 3100, "fees": 150, "books": 250, "tools": 250, "other": 250, "total": 4000, "hours": 600, "certification": "Completion / GED" }
+  ]
+}

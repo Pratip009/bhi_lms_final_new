@@ -2,6 +2,7 @@ import { MongoClient } from "mongodb";
 import bcrypt from "bcryptjs";
 import { randomBytes, randomUUID } from "node:crypto";
 import { ensureIndexes } from "./indexes";
+import { seedCourses } from "./seed-courses";
 import { canonicalEmail } from "../src/lib/email-canonical";
 
 /**
@@ -14,6 +15,7 @@ async function main() {
   const client = await MongoClient.connect(process.env.MONGODB_URI);
   const db = client.db(process.env.MONGODB_DB || undefined);
   await ensureIndexes(db);
+  await seedCourses(db);
   const users = db.collection("users");
   const entries = (process.env.SEED_ADMINS ?? "")
     .split(",")

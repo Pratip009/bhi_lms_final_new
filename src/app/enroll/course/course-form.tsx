@@ -3,7 +3,7 @@
 import { ActionForm, Submit, useFormCtx } from "@/components/forms";
 import { setCourseAction } from "../actions";
 
-function Options({ courses, current, locked }: { courses: { id: string; name: string; description: string }[]; current: string | null; locked: boolean }) {
+function Options({ courses, current, locked }: { courses: { id: string; name: string; description: string; details?: string }[]; current: string | null; locked: boolean }) {
   const { state } = useFormCtx();
   return (
     <fieldset disabled={locked}>
@@ -15,6 +15,7 @@ function Options({ courses, current, locked }: { courses: { id: string; name: st
               <input type="radio" name="courseId" value={c.id} defaultChecked={current === c.id} className="accent-pine-700" />
               {c.name}
             </span>
+            {c.details && <span className="text-sm text-slate-700">{c.details}</span>}
             {c.description && <span className="text-sm text-slate-600">{c.description}</span>}
           </label>
         ))}
@@ -24,7 +25,7 @@ function Options({ courses, current, locked }: { courses: { id: string; name: st
   );
 }
 
-export function CourseForm({ courses, current, locked }: { courses: { id: string; name: string; description: string }[]; current: string | null; locked: boolean }) {
+export function CourseForm({ courses, current, locked }: { courses: { id: string; name: string; description: string; details?: string }[]; current: string | null; locked: boolean }) {
   return (
     <ActionForm action={setCourseAction} className="space-y-5">
       <Options courses={courses} current={current} locked={locked} />

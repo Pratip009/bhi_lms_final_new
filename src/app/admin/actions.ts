@@ -24,7 +24,7 @@ import { INVITE_TTL_DAYS, newInviteToken } from "@/lib/invite";
 import { canonicalEmail } from "@/lib/email-canonical";
 import { randomBytes } from "node:crypto";
 import { hashPassword } from "@/lib/password";
-import { CATEGORY_LABELS, coerceRaw, getTemplate, rawFromForm, schemaFor, sectionLabel } from "@/lib/forms/templates";
+import { CATEGORY_LABELS, coerceRaw, feesTotalCents, getTemplate, rawFromForm, schemaFor, sectionLabel } from "@/lib/forms/templates";
 
 const uuid = z.string().uuid();
 
@@ -383,9 +383,24 @@ export async function endEnrollmentAction(_: ActionState, fd: FormData): Promise
 // ---------- Courses and classes ----------
 
 const PROGRAMS: Category[] = ["PRIVATE", "EQISS", "DFS"];
+const dollars = (label: string) =>
+  z.string().trim().default("0").transform((v, ctx) => {
+    if (!v) return 0;
+    const c = parseUsdToCents(v) ?? (/^0+(\.0+)?$/.test(v.replace(/[$,]/g, "")) ? 0 : null);
+    if (c === null) { ctx.addIssue({ code: z.ZodIssueCode.custom, message: `${label}: enter an amount like 150 or 150.00` }); return 0; }
+    return c;
+  });
 const courseSchema = z.object({
   name: z.string().trim().min(2, "Enter a course name").max(120),
   description: z.string().trim().max(2000).default(""),
+  hours: z.string().trim().default("").transform((v, ctx) => {
+    if (!v) return null;
+    const n = Number(v);
+    if (!Number.isInteger(n) || n < 0 || n > 10000) { ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Enter whole hours" }); return null; }
+    return n;
+  }),
+  certification: z.string().trim().max(200).default("").transform((v) => v || null),
+  tuition: dollars("Tuition"), fees: dollars("Fees"), books: dollars("Books"), tools: dollars("Tools"), other: dollars("Other"),
 });
 
 export async function saveCourseAction(courseId: string | null, _: ActionState, fd: FormData): Promise<ActionState> {
@@ -393,13 +408,16 @@ export async function saveCourseAction(courseId: string | null, _: ActionState, 
   const parsed = courseSchema.safeParse(formObject(fd));
   if (!parsed.success) return invalid(parsed.error);
   const fundingPrograms = fd.getAll("fundingPrograms").map(String).filter((p): p is Category => PROGRAMS.includes(p as Category));
+  const { tuition, fees: feesC, books, tools, other, ...rest } = parsed.data;
+  const fees = { tuitionCents: tuition, feesCents: feesC, booksCents: books, toolsCents: tools, otherCents: other };
+  const doc = { ...rest, fees: feesTotalCents(fees) > 0 ? fees : null };
   const { courses } = await cols();
   let id = courseId;
   if (courseId) {
-    await courses.updateOne({ _id: courseId }, { $set: { ...parsed.data, fundingPrograms } });
+    await courses.updateOne({ _id: courseId }, { $set: { ...doc, fundingPrograms } });
   } else {
     id = newId();
-    await courses.insertOne({ _id: id, ...parsed.data, fundingPrograms, archived: false, createdAt: new Date() });
+    await courses.insertOne({ _id: id, ...doc, fundingPrograms, archived: false, createdAt: new Date() });
   }
   await audit(admin._id, courseId ? "course.update" : "course.create", "course", id);
   revalidatePath("/admin/courses", "layout");
