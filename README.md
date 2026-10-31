@@ -4,12 +4,12 @@ Enrollment, approval, class assignment, attendance and monthly progress reports 
 
 **Workflows (October 2026 requirements):**
 
-- **Private:** register → verify email → Private → choose course → tuition payment verified by the office → Common Forms + Private Forms → resume and documents → submit → admin decision → enrolled in the chosen course → dashboard (monthly handwritten attendance).
+- **Private:** register → verify email → Private → choose course → pay the course's tuition and fees online (Stripe) → Common Forms + Private Forms → resume and documents → submit → admin decision → enrolled in the chosen course → dashboard (monthly attendance sheet).
 - **EQISS / One-Stop:** register → Non-Private → EQISS + Hudson, Bergen or Somerset County → course → Common Forms + Non-Private Enrollment Agreement → resume and documents → submit → admin decision → enrolled → biweekly ITA report (same sheet for all three counties).
 - **DFS:** register → Non-Private → DFS → course → Common Forms + Non-Private Enrollment Agreement → resume and documents → submit → admin decision → enrolled → monthly handwritten attendance.
 - **Instructor:** sign up at `/register/instructor` (or be invited by an admin) → admin approves → admin assigns one or more courses → instructor sees those courses' students, each with an **Attendance Sheet** and a **Monthly Progress Report**.
 
-Corrections: an admin requests resubmission with a written note (emailed to the student). The flagged sections reopen; the student edits and resubmits; every submission is kept as a snapshot.
+Corrections: the admin clicks **Request corrections**, which opens an email to the student's registered address. The admin ticks the parts to reopen, writes the message and clicks Send. The student is taken straight to those parts (locked parts are skipped), edits and resubmits; everything else stays saved and every submission is kept as a snapshot.
 
 **Stack:** Next.js 15 (App Router, TypeScript), MongoDB (official Node.js driver), Tailwind CSS, Zod, Resend (email OTP), pdf-lib.
 
@@ -21,11 +21,16 @@ Requirements: Node.js 20+, MongoDB 6+ (MongoDB Atlas works; a replica set is not
 npm install
 cp .env.example .env.local        # then fill it in (see below)
 npm run db:setup                  # creates the indexes (unique emails, class codes, etc.)
-npm run db:seed                   # creates admin accounts from SEED_ADMINS and prints one-time passwords
+npm run db:seed                   # loads the BHI course list (data/bhi-courses.json), creates admin accounts from SEED_ADMINS and prints one-time passwords
+npm run db:courses                # (optional) re-loads the course list on its own; safe to repeat, never overwrites admin edits
 npm run dev                       # http://localhost:3000
 ```
 
-Then, as an admin: add the BHI course list under **Courses and classes** (students choose from it), and assign instructors to courses.
+Then, as an admin: check the course list under **Courses and classes** (fees, hours, certification and which enrollment types may choose each course), and assign instructors to courses.
+
+### Upgrading from the 26 October 2026 version (QA fixes)
+
+Take a database backup, deploy, then run `npm run db:setup` (replaces the enrollment index so a student can have more than one enrollment period in the same class) and `npm run db:courses` (adds the official course list). Notes: check-in codes are now off unless turned on per class in Class settings; applications already submitted keep their answers, and the new form fields show as "-" for them. See CHANGES.md.
 
 ### Upgrading an existing installation to the October 2026 version
 
@@ -53,9 +58,10 @@ Admins sign in with the printed one-time password, then use **Forgot password** 
 | `APP_URL` | Public URL used in email links |
 | `RESEND_API_KEY` / `EMAIL_FROM` | Resend credentials. `EMAIL_FROM` must be on a domain verified in Resend. Required in production. |
 | `STORAGE_DIR` | Folder for uploaded files (outside `public/`) |
-| `PRIVATE_TUITION_USD` | Tuition shown to Private students only (0 = "as stated in your Private Enrollment Agreement") |
-| `PRIVATE_PAYMENT_GATE` | When a Private payment must be verified: `BEFORE_FORMS` (default), `BEFORE_SUBMIT` or `BEFORE_APPROVAL`. Approval always requires a paid or waived payment. |
-| `PAYMENT_INSTRUCTIONS` | Plain text shown to Private students on the payment step. No card details are collected; the office verifies payments. |
+| `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | Stripe keys for online tuition payment (`sk_test_...` / `whsec_...` while testing). Webhook endpoint: `https://<site>/api/stripe/webhook` with `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed`. Without keys, the office records payments made in person. |
+| `PRIVATE_TUITION_USD` | Fallback amount only, for a course that has no fees set on the Courses page. |
+| `PRIVATE_PAYMENT_GATE` | Deprecated; still accepted. Private payment is always required before the forms. |
+| `PAYMENT_INSTRUCTIONS` | Deprecated; still accepted. |
 | `PAYMENT_STAGE` | Deprecated; still accepted so older `.env` files validate. |
 | `REQUIRE_GMAIL` | `true` = student sign-up requires a Gmail address (@gmail.com or @googlemail.com) |
 | `APP_TIMEZONE` | Office time zone for "today" and report months. Default `America/New_York` |
@@ -107,14 +113,12 @@ The end-to-end suite (97 checks) drives the real server over HTTP through every 
 
 ## Waiting on documents and decisions from the office
 
-The admin dashboard shows a warning while any of these is outstanding.
+The admin home page lists anything still outstanding at the bottom.
 
-1. **Official form wording.** The photographed packets are not in the repository. Each form in `src/lib/forms/templates.ts` has the official title and order, a minimal set of fields and `pendingOfficialText: true`. Paste the printed text into `body` (one string per paragraph), match the fields to the paper form, set `pendingOfficialText: false` and bump `version`. Keep `containsFees: true` on the Private Forms.
-2. **Inter-Agency Referral / Status Change Form:** not identifiable in the photographs. Non-Private students can upload it (optional) until BHI provides it.
-3. **EQISS certification statements:** paste the customer and instructor statements from "Equus Timesheet - Updated 2026.docx" into `src/lib/eqiss-text.ts`.
-4. **Course list:** add the official BHI courses in the admin (none are created automatically).
-5. **Payment timing:** `PRIVATE_PAYMENT_GATE` defaults to the brief's "pay before forms". There is no online payment provider; the office records payments as paid or waived.
-6. **Social Security card copy:** optional upload until BHI confirms it is required.
+1. **Non-Private Enrollment Agreement wording.** Every Common and Private form now has the official wording and fields from the October 2026 packets (`src/lib/forms/templates.ts`). Only `nonprivate_agreement` still has `pendingOfficialText: true`; paste its printed text into `body`, match the fields, set it to `false` and bump `version`.
+2. **EQISS certification statements:** paste the customer and instructor statements from "Equus Timesheet - Updated 2026.docx" into `src/lib/eqiss-text.ts`.
+3. **Course list details to confirm** (`data/bhi-courses.json`): certifications for programs 9–14 are left empty because the shared table looked shifted by one row; which enrollment types may choose each course (all are open to everyone until set); whether the $25 application and $100 registration fees are part of each Total.
+4. **Inter-Agency Referral / Status Change Form** and **Social Security card copy:** optional uploads until BHI confirms.
 
 ## Admin controls added in the October 2026 audit
 
@@ -124,16 +128,16 @@ The admin dashboard shows a warning while any of these is outstanding.
 - **Assigning instructors to classes.** From a class page (pick the instructor) or from an instructor's page (pick the class; classes are listed by course). Each class has at most one lead: making someone lead while another lead exists needs "Replace current lead", which turns the old lead into an assistant. Archived classes and disabled accounts can't be assigned, and the instructor is emailed when given a new class. The dashboard counts classes with no instructor.
 - **Disable / re-enable accounts** (students and instructors). Disabling signs the person out everywhere, blocks sign-in and the attendance API, and removes them from assignment pickers.
 
-## Student check-in (attendance)
+## Daily attendance
 
-1. On the attendance page for today, the instructor (or an admin, from the class page) taps **Start check-in** and chooses after how many minutes arrivals count as late (default 10).
-2. The screen shows a 6-digit code that changes every 30 seconds, a live "x of y checked in" count, and who arrived when.
-3. Students see a check-in box on their dashboard (and class page) and enter the code. Each student checks in once, only for their own active classes, only on a day the class runs.
-4. The instructor closes check-in (it also closes itself after 4 hours). The attendance sheet is then pre-filled: checked-in students as present or late with their check-in time, everyone else as absent. The instructor reviews, adjusts and saves. **The saved sheet is the official record**; a check-in alone never becomes attendance.
+Each class has a **Daily attendance** screen (instructors: from their class; admins: Courses and classes → class → Daily attendance).
 
-Safeguards: a code works for 30 to 60 seconds, so one sent to someone outside expires almost at once; a student gets 10 tries per 10 minutes; two students checking in from the same phone are both flagged to the instructor; reopening keeps earlier check-ins and still measures lateness from the first opening. Check-ins that the saved sheet doesn't account for (never saved, or saved as absent before the student checked in) are flagged on the instructor's pages and the admin dashboard until resolved. An absent mark saved after a check-in is treated as the instructor's decision.
+1. For each student, choose Present, Late, Absent, Sick, Holiday or Excused. Time in and time out start at the class times (Class settings) and can be changed; lunch is the class break and is taken off automatically. Hours are calculated, never typed. Absent, sick, holiday and excused days count zero hours.
+2. Save, then sign the day. An admin can sign on the instructor's behalf (e.g. a substitute taught).
+3. DFS and Private students see their monthly sheet and sign the days they attended on their own login. The instructor signs off the month.
+4. EQISS students' biweekly reports are filled from the same daily records (A = absent or excused, H = holiday, S = sick). Staff edits on the report update the daily records too, so the two never disagree. Students enter their own initials.
 
-Limitation: no code can stop someone in the room from reading the code to an absent student over the phone in real time. The headcount, the shared-phone flag and the instructor's confirmation are the backstop.
+**Optional check-in codes:** in Class settings, "Students check in with a code on their phone" (off by default). When on, the instructor shows a 6-digit code that works for 10 minutes; students enter it on their dashboard and press "Fill my attendance" at the end of class. A student is late when they check in more than the class's "late after" minutes past the class start time. Two students checking in from the same phone are flagged. The saved, signed daily sheet is always the official record.
 
 ## Upgrading an existing database
 
@@ -148,7 +152,7 @@ Each change is a single atomic document update, so the app needs no multi-docume
 | `users` | Students, instructors and admins (role, instructor approval, verified email) |
 | `applications` | One per student, with form answers, signatures, uploaded-file records and correction requests embedded |
 | `courses`, `classes` | Courses and their classes/cohorts. Each class embeds its assigned instructors |
-| `enrollments` | Student-to-class assignments (unique per student and class) |
+| `enrollments` | Student-to-class enrollment periods. A student can have several periods in the same class (e.g. after returning); only one can be active |
 | `attendance_checkins` | Live student check-in per class and day: opening time, late threshold, and each student's check-in time and device |
 | `class_sessions` | One per class per date, holding that day's attendance for every student |
 | `progress_reports` | One per student enrollment per month, with the instructor's signature and earlier versions |
