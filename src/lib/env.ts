@@ -1,5 +1,8 @@
 import { z } from "zod";
 
+/** An empty value (e.g. `PAYMENT_STAGE=` in the .env file) counts as not set, so the default applies. */
+const optional = <T extends z.ZodTypeAny>(t: T) => z.preprocess((v) => (typeof v === "string" && v.trim() === "" ? undefined : v), t);
+
 const schema = z.object({
   MONGODB_URI: z.string().regex(/^mongodb(\+srv)?:\/\//, "MONGODB_URI must start with mongodb:// or mongodb+srv://"),
   MONGODB_DB: z.string().optional(),
@@ -16,13 +19,10 @@ const schema = z.object({
       'EMAIL_FROM must look like "BHI LMS <no-reply@yourdomain.org>" or "no-reply@yourdomain.org"',
     ),
   STORAGE_DIR: z.string().default("./storage"),
-  /** Deprecated (kept so old .env files still validate). Use PRIVATE_PAYMENT_GATE. */
-  PAYMENT_STAGE: z.enum(["PENDING", "DURING_ENROLLMENT", "AFTER_APPROVAL", "OFFLINE"]).default("PENDING"),
-  /**
-   * No longer used: Private students now submit first and pay after an admin's payment request.
-   * Kept so existing .env files still validate.
-   */
-  PRIVATE_PAYMENT_GATE: z.enum(["BEFORE_FORMS", "BEFORE_SUBMIT", "BEFORE_APPROVAL"]).default("BEFORE_APPROVAL"),
+  /** Deprecated and ignored (kept so old .env files still validate). */
+  PAYMENT_STAGE: optional(z.enum(["PENDING", "DURING_ENROLLMENT", "AFTER_APPROVAL", "OFFLINE"]).default("PENDING")),
+  /** Deprecated and ignored: Private students always pay online before the enrollment forms. */
+  PRIVATE_PAYMENT_GATE: optional(z.enum(["BEFORE_FORMS", "BEFORE_SUBMIT", "BEFORE_APPROVAL"]).default("BEFORE_FORMS")),
   /**
    * Stripe (online tuition payment for Private students). Secret key from the Stripe dashboard
    * (sk_test_... while testing, sk_live_... in production) and the signing secret of the webhook
@@ -31,18 +31,19 @@ const schema = z.object({
    */
   STRIPE_SECRET_KEY: z.string().optional().default("").refine((v) => v === "" || /^(sk|rk)_(test|live)_/.test(v), "STRIPE_SECRET_KEY must start with sk_test_ or sk_live_"),
   STRIPE_WEBHOOK_SECRET: z.string().optional().default("").refine((v) => v === "" || v.startsWith("whsec_"), "STRIPE_WEBHOOK_SECRET must start with whsec_"),
-  /** Shown to Private students only on the payment step (e.g. how to pay the office). Plain text. */
+  /** Deprecated and ignored. */
   PAYMENT_INSTRUCTIONS: z.string().max(2000).default(""),
-  PRIVATE_TUITION_USD: z.coerce.number().min(0).default(0),
-  REQUIRE_GMAIL: z.enum(["true", "false"]).default("true").transform((v) => v === "true"),
+  /** Fallback only, for a course with no fees set on the Courses page. */
+  PRIVATE_TUITION_USD: optional(z.coerce.number().min(0).default(0)),
+  REQUIRE_GMAIL: optional(z.enum(["true", "false"]).default("true")).transform((v) => v === "true"),
   INTEGRATION_API_KEY: z.string().optional().default(""),
-  APP_TIMEZONE: z.string().default("America/New_York").refine((tz) => {
+  APP_TIMEZONE: optional(z.string().default("America/New_York")).refine((tz) => {
     try { new Intl.DateTimeFormat("en-US", { timeZone: tz }); return true; } catch { return false; }
   }, "APP_TIMEZONE must be an IANA time zone such as America/New_York"),
-  ATTENDANCE_EDIT_DAYS: z.coerce.number().int().min(0).max(3650).default(0),
+  ATTENDANCE_EDIT_DAYS: optional(z.coerce.number().int().min(0).max(3650).default(0)),
   NODE_ENV: z.string().default("development"),
   // Testing/staging only: print emails to the server log instead of sending them.
-  ALLOW_CONSOLE_EMAIL: z.enum(["true", "false"]).default("false").transform((v) => v === "true"),
+  ALLOW_CONSOLE_EMAIL: optional(z.enum(["true", "false"]).default("false")).transform((v) => v === "true"),
 });
 
 export type Env = z.infer<typeof schema>;
