@@ -142,3 +142,43 @@ export function Checkbox({ name, label, defaultChecked, required }: { name: stri
     </div>
   );
 }
+
+/** One choice from a short list, shown as buttons that are easy to tap (Yes / No and similar). */
+export function RadioGroup({ name, label, options, defaultValue, required }: { name: string; label: string; options: string[]; defaultValue?: string; required?: boolean }) {
+  const { state } = useFormCtx();
+  const err = state.fieldErrors?.[name];
+  return (
+    <fieldset aria-invalid={err ? true : undefined}>
+      <legend className="mb-1.5 text-sm font-medium text-ink">{label}{required && <span className="text-brick-600"> *</span>}</legend>
+      <div className="flex flex-wrap gap-2">
+        {options.map((o) => (
+          <label key={o} className={cx("flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm has-[:checked]:border-pine-700 has-[:checked]:bg-pine-50", err ? "border-brick-600" : "border-line")}>
+            <input type="radio" name={name} value={o} defaultChecked={defaultValue === o} className="h-4 w-4 accent-pine-700" />
+            {o}
+          </label>
+        ))}
+      </div>
+      {err && <p className="mt-1 text-xs font-medium text-brick-600">{err}</p>}
+    </fieldset>
+  );
+}
+
+/** "Check all that apply". */
+export function CheckGroup({ name, label, options, defaultValue, required }: { name: string; label: string; options: string[]; defaultValue?: string[]; required?: boolean }) {
+  const { state } = useFormCtx();
+  const err = state.fieldErrors?.[name];
+  return (
+    <fieldset aria-invalid={err ? true : undefined}>
+      <legend className="mb-1.5 text-sm font-medium text-ink">{label}{required && <span className="text-brick-600"> *</span>}</legend>
+      <div className="flex flex-wrap gap-2">
+        {options.map((o) => (
+          <label key={o} className={cx("flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm has-[:checked]:border-pine-700 has-[:checked]:bg-pine-50", err ? "border-brick-600" : "border-line")}>
+            <input type="checkbox" name={name} value={o} defaultChecked={defaultValue?.includes(o)} className="h-4 w-4 accent-pine-700" />
+            {o}
+          </label>
+        ))}
+      </div>
+      {err && <p className="mt-1 text-xs font-medium text-brick-600">{err}</p>}
+    </fieldset>
+  );
+}

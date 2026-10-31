@@ -138,7 +138,17 @@ export type Application = {
   updatedAt: Date;
 };
 
-export type Course = { _id: string; name: string; description: string; fundingPrograms: Category[]; archived: boolean; createdAt: Date };
+/** Fee breakdown from the BHI "Program Details and Fee Structure" list, in cents. */
+export type CourseFees = { tuitionCents: number; feesCents: number; booksCents: number; toolsCents: number; otherCents: number };
+export type Course = {
+  _id: string; name: string; description: string; fundingPrograms: Category[]; archived: boolean; createdAt: Date;
+  /** Private tuition and fees. The total is what a Private student pays online before the forms. */
+  fees?: CourseFees | null;
+  /** Program length in hours. */
+  hours?: number | null;
+  /** Certification the program leads to. */
+  certification?: string | null;
+};
 
 export type ClassInstructor = { instructorId: string; role: "LEAD" | "ASSISTANT"; assignedAt: Date };
 export type Klass = {

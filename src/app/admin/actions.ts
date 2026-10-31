@@ -24,7 +24,7 @@ import { INVITE_TTL_DAYS, newInviteToken } from "@/lib/invite";
 import { canonicalEmail } from "@/lib/email-canonical";
 import { randomBytes } from "node:crypto";
 import { hashPassword } from "@/lib/password";
-import { CATEGORY_LABELS, coerceRaw, getTemplate, schemaFor, sectionLabel } from "@/lib/forms/templates";
+import { CATEGORY_LABELS, coerceRaw, getTemplate, rawFromForm, schemaFor, sectionLabel } from "@/lib/forms/templates";
 
 const uuid = z.string().uuid();
 
@@ -294,7 +294,7 @@ export async function adminSaveFormAction(applicationId: string, templateKey: st
   // Same server-side filter as the student: a Non-Private application has no fee forms to edit.
   const template = getTemplate(templateKey, app.category);
   if (!template) return { error: "This form isn't part of this application." };
-  const values = coerceRaw(template, Object.fromEntries(template.fields.map((f) => [f.name, fd.get(f.name) ?? undefined])));
+  const values = coerceRaw(template, rawFromForm(template, fd));
   const parsed = schemaFor(template).safeParse(values);
   if (!parsed.success) return invalid(parsed.error);
   const data = parsed.data as Record<string, unknown>;

@@ -1,9 +1,9 @@
 import "server-only";
 import { PDFDocument } from "pdf-lib";
 import { cols } from "@/db";
-import { env } from "@/lib/env";
 import { getFile } from "@/lib/storage";
-import { describeEnrollment, documentsFor, templatesFor } from "@/lib/forms/templates";
+import { bodyOf, describeEnrollment, displayValue, documentsFor, templatesFor } from "@/lib/forms/templates";
+import { templateContext } from "@/lib/forms/context";
 import { PdfWriter } from "./text";
 import { answersHash } from "@/lib/enrollment";
 
@@ -19,7 +19,7 @@ export async function buildApplicationPdf(applicationId: string): Promise<Uint8A
   const docs = app.documents;
 
   const templates = templatesFor(app.category);
-  const ctx = { tuitionUsd: env().PRIVATE_TUITION_USD };
+  const ctx = await templateContext(app, student);
   const w = await PdfWriter.create();
 
   w.text("BHI Enrollment Packet", { size: 18, bold: true, color: [0.12, 0.31, 0.27], gap: 6 });
@@ -34,11 +34,12 @@ export async function buildApplicationPdf(applicationId: string): Promise<Uint8A
   for (const t of templates) {
     const resp = app.forms?.[t.key];
     w.text(t.title, { size: 13, bold: true, gap: 4 });
-    if (t.intro) w.text(t.intro(ctx), { size: 9.5, color: [0.35, 0.4, 0.45], gap: 6 });
-    for (const para of t.body ?? []) w.text(para, { size: 9.5, gap: 4 });
+    for (const para of bodyOf(t, ctx)) w.text(para, { size: 9.5, gap: 4 });
     for (const f of t.fields) {
-      const v = resp?.data?.[f.name];
-      w.labelValue(f.label, f.type === "checkbox" ? (v === true ? "Yes" : "No") : String(v ?? ""));
+      if (f.type === "heading") { w.text(f.label, { size: 10.5, bold: true, gap: 3 }); continue; }
+      if (f.type === "note") { w.text(f.label, { size: 9, gap: 3 }); continue; }
+      // The packet is a full record for BHI staff and the student themself, so the SSN is not masked.
+      w.labelValue(f.label, displayValue(f, resp?.data?.[f.name], { revealSsn: true }));
     }
     if (t.requiresSignature) {
       const sig = app.signatures?.[t.key];

@@ -13,7 +13,7 @@ import { detectFileType, MAX_UPLOAD_BYTES, ALLOWED_BY_DOC, safeFileName } from "
 import { notifyAdminsNewApplication, sendSubmissionReceivedEmail } from "@/lib/email";
 import { courseServes } from "@/lib/courses";
 import { invalid, type ActionState } from "@/lib/action";
-import { coerceRaw, documentsFor, getTemplate, schemaFor, templatesFor, SECTION_CATEGORY, SECTION_COURSE, SECTION_DOCUMENTS } from "@/lib/forms/templates";
+import { coerceRaw, documentsFor, getTemplate, inputFields, rawFromForm, schemaFor, templatesFor, SECTION_CATEGORY, SECTION_COURSE, SECTION_DOCUMENTS } from "@/lib/forms/templates";
 import { answersHash, canEdit, editableSections, enrollmentState, openCorrection, selectionUpdate, validateSelection } from "@/lib/enrollment";
 
 /**
@@ -108,14 +108,13 @@ export async function saveFormAction(templateKey: string, _: ActionState, fd: Fo
   }
   if (enrollmentState(application).formsLocked) return { error: "Your tuition payment must be verified before you complete the forms." };
 
-  const raw = Object.fromEntries(template.fields.map((f) => [f.name, fd.get(f.name) ?? undefined]));
-  const values = coerceRaw(template, raw);
+  const values = coerceRaw(template, rawFromForm(template, fd));
   const { applications } = await cols();
   const now = new Date();
 
   if (fd.get("intent") === "draft") {
     const draft: Record<string, unknown> = {};
-    for (const f of template.fields) {
+    for (const f of inputFields(template)) {
       const v = values[f.name];
       draft[f.name] = typeof v === "string" ? v.trim().slice(0, f.maxLength ?? 500) : v;
     }

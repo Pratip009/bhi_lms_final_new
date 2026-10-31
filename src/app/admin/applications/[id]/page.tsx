@@ -5,7 +5,7 @@ import { requireAdmin } from "@/lib/auth";
 import { env } from "@/lib/env";
 import { ALL_SECTIONS, enrollmentState } from "@/lib/enrollment";
 import { usersById } from "@/lib/queries";
-import { describeEnrollment, sectionLabel, templatesFor, TEMPLATES, GROUP_LABELS } from "@/lib/forms/templates";
+import { describeEnrollment, displayValue, inputFields, sectionLabel, templatesFor, TEMPLATES, GROUP_LABELS } from "@/lib/forms/templates";
 import { courseServes } from "@/lib/courses";
 import { approvalBlockedByPayment } from "@/lib/payment";
 import { CategoryForm } from "@/app/enroll/category-form";
@@ -43,7 +43,6 @@ export default async function ApplicationDetail({ params }: { params: Promise<{ 
   const currentKeys = new Set(templatesFor(app.category).map((t) => t.key));
   const legacy = Object.entries(app.forms ?? {}).filter(([k]) => !currentKeys.has(k) && !(app.category !== "PRIVATE" && TEMPLATES.find((t) => t.key === k)?.containsFees));
   const submissions = [...(app.submissions ?? [])].reverse();
-  const ctx = { tuitionUsd: env().PRIVATE_TUITION_USD };
 
   return (
     <>
@@ -74,12 +73,11 @@ export default async function ApplicationDetail({ params }: { params: Promise<{ 
               <div key={f.template.key} className="space-y-2">
               {newGroup && <h2 className="pt-2 text-sm font-semibold uppercase tracking-wide text-slate-500">{GROUP_LABELS[f.template.group]}</h2>}
               <Card title={f.template.title} actions={<Link href={`/admin/applications/${app._id}/forms/${f.template.key}`} className="text-sm font-semibold text-pine-700 underline">Edit</Link>}>
-                {f.template.intro && <p className="mb-4 rounded bg-mist p-3 text-sm text-slate-700">{f.template.intro(ctx)}</p>}
                 <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
-                  {f.template.fields.map((fd) => (
+                  {inputFields(f.template).map((fd) => (
                     <div key={fd.name}>
                       <dt className="text-slate-500">{fd.label}</dt>
-                      <dd className="font-medium">{fd.type === "checkbox" ? (f.data[fd.name] === true ? "Yes" : "No") : String(f.data[fd.name] ?? "") || "-"}</dd>
+                      <dd className="whitespace-pre-wrap font-medium">{displayValue(fd, f.data[fd.name]) || "-"}</dd>
                     </div>
                   ))}
                 </dl>

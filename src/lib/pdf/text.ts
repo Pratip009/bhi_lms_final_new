@@ -6,6 +6,8 @@ export function pdfSafe(s: unknown): string {
     .replace(/[\u2018\u2019]/g, "'")
     .replace(/[\u201C\u201D]/g, '"')
     .replace(/[\u2013\u2014]/g, "-")
+    .replace(/\u2022/g, "-")
+    .replace(/\u2713/g, "check")
     .replace(/\r/g, "")
     .replace(/[^\x09\x0A\x20-\x7E\xA0-\xFF]/g, "?");
 }

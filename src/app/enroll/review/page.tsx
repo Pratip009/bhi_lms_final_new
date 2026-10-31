@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { requireStudentStage } from "@/lib/auth";
 import { env } from "@/lib/env";
 import { enrollmentState } from "@/lib/enrollment";
-import { describeEnrollment } from "@/lib/forms/templates";
+import { describeEnrollment, displayValue, inputFields } from "@/lib/forms/templates";
 import { cols } from "@/db";
 import { StatusBadge } from "@/components/ui";
 import { StudentShell } from "@/components/student-shell";
@@ -34,10 +34,10 @@ export default async function ReviewPage() {
           <Card key={f.template.key} title={f.template.title}
             actions={<Link href={`/enroll/forms/${f.template.key}`} className="text-sm font-semibold text-pine-700 underline">Edit</Link>}>
             <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
-              {f.template.fields.map((fd) => (
+              {inputFields(f.template).map((fd) => (
                 <div key={fd.name}>
                   <dt className="text-slate-500">{fd.label}</dt>
-                  <dd className="font-medium">{fd.type === "checkbox" ? (f.data[fd.name] === true ? "Yes" : "No") : String(f.data[fd.name] ?? "") || "-"}</dd>
+                  <dd className="whitespace-pre-wrap font-medium">{displayValue(fd, f.data[fd.name]) || "-"}</dd>
                 </div>
               ))}
             </dl>
