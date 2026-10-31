@@ -557,13 +557,30 @@ export async function assignClassToInstructorAction(instructorId: string, _: Act
   return assignInstructorToClass(admin._id, String(fd.get("classId") ?? ""), fd);
 }
 
+/**
+ * Takes an instructor off a section and keeps a record of when they taught it (start and stop dates).
+ * Their attendance, sign-offs and reports stay where they are. Returns false if they weren't on it.
+ */
+async function endSectionAssignment(classId: string, instructorId: string, byId: string, reason: string): Promise<boolean> {
+  const { classes } = await cols();
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const klass = await classes.findOne({ _id: classId }, { projection: { instructors: 1 } });
+    const entry = klass?.instructors.find((i) => i.instructorId === instructorId);
+    if (!klass || !entry) return false;
+    const res = await classes.updateOne(
+      { _id: classId, instructors: klass.instructors },
+      { $pull: { instructors: { instructorId } }, $push: { instructorHistory: { ...entry, removedAt: new Date(), removedById: byId, reason } } },
+    );
+    if (res.modifiedCount) return true;
+  }
+  return false;
+}
+
 export async function removeInstructorAction(classId: string, _: ActionState, fd: FormData): Promise<ActionState> {
   const admin = await requireAdmin();
   const instructorId = uuid.safeParse(fd.get("instructorId"));
   if (!instructorId.success) return { error: "Invalid request." };
-  const { classes } = await cols();
-  const res = await classes.updateOne({ _id: classId }, { $pull: { instructors: { instructorId: instructorId.data } } });
-  if (!res.modifiedCount) return { error: "That instructor isn't on this class." };
+  if (!(await endSectionAssignment(classId, instructorId.data, admin._id, "removed by admin"))) return { error: "That instructor isn't on this class." };
   await audit(admin._id, "class.remove_instructor", "class", classId, { instructorId: instructorId.data });
   revalidatePath("/admin", "layout");
   revalidatePath("/instructor", "layout");
@@ -582,7 +599,9 @@ export async function decideInstructorAction(instructorId: string, _: ActionStat
   );
   if (!inst) return { error: "Instructor not found." };
   if (decision.data === "REJECTED") {
-    await classes.updateMany({ "instructors.instructorId": instructorId }, { $pull: { instructors: { instructorId } } });
+    for (const k of await classes.find({ "instructors.instructorId": instructorId }, { projection: { _id: 1 } }).toArray()) {
+      await endSectionAssignment(k._id, instructorId, admin._id, "instructor account rejected");
+    }
     // Assignments are ended, not deleted, so the record of who taught what stays.
     await (await cols()).courseAssignments.updateMany({ instructorId, removedAt: null }, { $set: { removedAt: new Date(), removedById: admin._id } });
   }

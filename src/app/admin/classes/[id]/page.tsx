@@ -47,6 +47,14 @@ export default async function AdminClassPage({ params }: { params: Promise<{ id:
     .sort((a, b) => Number(b.same) - Number(a.same) || a.label.localeCompare(b.label));
   const mergeable = openSections.filter((k) => k.courseId === klass.courseId).map((k) => ({ id: k._id, label: `${k.code}, ${k.cohort}` }));
   const courseInstructors = await usersById((await courseAssignments.find({ courseId: klass.courseId, removedAt: null }).toArray()).map((a) => a.instructorId));
+  // Who taught this class and when: section assignments (current and earlier) and course assignments.
+  const courseAssignHistory = await courseAssignments.find({ courseId: klass.courseId }).sort({ assignedAt: -1 }).toArray();
+  const teachingHistory = [
+    ...klass.instructors.map((i) => ({ instructorId: i.instructorId, scope: "This class", role: i.role, from: i.assignedAt, to: null as Date | null })),
+    ...(klass.instructorHistory ?? []).map((i) => ({ instructorId: i.instructorId, scope: "This class", role: i.role, from: i.assignedAt, to: i.removedAt as Date | null })),
+    ...courseAssignHistory.map((a) => ({ instructorId: a.instructorId, scope: "Whole course", role: "LEAD" as const, from: a.assignedAt, to: a.removedAt })),
+  ].sort((a, b) => b.from.getTime() - a.from.getTime());
+  const historyNames = await usersById(teachingHistory.map((h) => h.instructorId));
   const mergedInto = klass.mergedIntoClassId ? await classes.findOne({ _id: klass.mergedIntoClassId }, { projection: { code: 1 } }) : null;
 
   return (
@@ -133,6 +141,22 @@ export default async function AdminClassPage({ params }: { params: Promise<{ id:
           ) : (
             <p className="text-sm text-slate-600">No approved instructors yet. <Link href="/admin/instructors" className="underline">Review instructor sign-ups</Link>.</p>
           )}
+        </Card>
+
+        <Card title="Instructor history">
+          {teachingHistory.length === 0 ? <Empty>No instructor has been assigned yet.</Empty> : (
+            <Table head={["Instructor", "Assigned to", "Started", "Stopped"]}>
+              {teachingHistory.map((h, i) => (
+                <tr key={i}>
+                  <Td><Link href={`/admin/instructors/${h.instructorId}`} className="underline">{historyNames.get(h.instructorId)?.name ?? "Instructor"}</Link>{h.scope === "This class" && h.role === "ASSISTANT" ? " (assistant)" : ""}</Td>
+                  <Td>{h.scope}</Td>
+                  <Td>{fmtDate(h.from)}</Td>
+                  <Td>{h.to ? fmtDate(h.to) : <span className="font-semibold text-pine-700">Current</span>}</Td>
+                </tr>
+              ))}
+            </Table>
+          )}
+          <p className="mt-3 text-xs text-slate-500">Attendance and reports an instructor wrote stay on record after they stop teaching the class.</p>
         </Card>
 
         <Card title="Class details" actions={<ActionButton action={archiveClassAction.bind(null, klass._id)} label={klass.archived ? "Restore" : "Archive"} variant="ghost" confirm={klass.archived ? undefined : "Archive this class? Its records are kept."} />}>

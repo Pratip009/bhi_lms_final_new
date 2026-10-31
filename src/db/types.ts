@@ -169,6 +169,8 @@ export type Klass = {
   fundingProgram: FundingProgram;
   archived: boolean;
   instructors: ClassInstructor[];
+  /** Instructors who used to be assigned to this section, with when they started and stopped. */
+  instructorHistory?: (ClassInstructor & { removedAt: Date; removedById: string | null; reason: string })[];
   /** Set when this section was merged into another; its roster moved there and its records stay here. */
   mergedIntoClassId?: string | null;
   mergedAt?: Date | null;
