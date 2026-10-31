@@ -9,7 +9,7 @@ import { courseServes } from "@/lib/courses";
 import { approvalBlockedByPayment } from "@/lib/payment";
 import { CategoryForm } from "@/app/enroll/category-form";
 import { AdminCourseForm } from "@/components/admin-app-edit";
-import { Alert, Card, PageHeader, StatusBadge, fmtDate } from "@/components/ui";
+import { Alert, Card, PageHeader, StatusBadge, fmtDate, fmtDateTime } from "@/components/ui";
 import { ActionButton, CorrectionsForm, RejectForm } from "@/components/action-widgets";
 import { formatUsd } from "@/lib/payment";
 import { stripeEnabled } from "@/lib/tuition";
@@ -87,7 +87,7 @@ export default async function ApplicationDetail({ params }: { params: Promise<{ 
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img src={sig.imageDataUrl} alt={`Signature of ${sig.signerName}`} className="h-16 rounded border border-line bg-white" />
                         <p className="mt-1 text-xs text-slate-500">
-                          {sig.signerName}, {sig.signedAt.toISOString().replace("T", " ").slice(0, 16)} UTC, IP {sig.ip ?? "-"}
+                          {sig.signerName}, {fmtDateTime(sig.signedAt)}
                           {!f.signed && <span className="font-semibold text-brick-600"> (answers changed after signing)</span>}
                           {f.editedByAdmin && <span className="font-semibold text-marigold-700"> (edited by an admin after signing; see history)</span>}
                         </p>
@@ -128,7 +128,7 @@ export default async function ApplicationDetail({ params }: { params: Promise<{ 
             <Card title="Submission history">
               <ul className="space-y-2 text-sm">
                 {submissions.map((sub, i) => (
-                  <li key={i}>{sub.submittedAt.toISOString().slice(0, 16).replace("T", " ")} UTC: {sub.kind === "RESUBMIT" ? "resubmitted" : "submitted"} ·{" "}
+                  <li key={i}>{fmtDateTime(sub.submittedAt)}: {sub.kind === "RESUBMIT" ? "resubmitted" : "submitted"} ·{" "}
                     {describeEnrollment(sub)} · {allCourses.find((c) => c._id === sub.courseId)?.name ?? "no course"} · {Object.keys(sub.forms ?? {}).length} forms, {sub.documentIds.length} files</li>
                 ))}
               </ul>
@@ -159,7 +159,7 @@ export default async function ApplicationDetail({ params }: { params: Promise<{ 
           )}
           {app.status === "APPROVED" && (
             <Card title="Enrollment">
-              <Link href={`/admin/students/${student._id}`} className="font-semibold text-pine-700 underline">Student record, section and attendance</Link>
+              <Link href={`/admin/students/${student._id}`} className="font-semibold text-pine-700 underline">Student record, class and attendance</Link>
             </Card>
           )}
           {app.status === "REJECTED" && (
@@ -223,7 +223,7 @@ export default async function ApplicationDetail({ params }: { params: Promise<{ 
           <Card title="History">
             <ul className="space-y-2 text-xs text-slate-600">
               {history.map(({ log, actor }) => (
-                <li key={log._id}>{log.createdAt.toISOString().slice(0, 16).replace("T", " ")}: {log.action.replace("application.", "").replace(/_/g, " ")} by {actor ?? "system"}</li>
+                <li key={log._id}>{fmtDateTime(log.createdAt)}: {historyText(log.action)} by {actor ?? "the system"}</li>
               ))}
             </ul>
           </Card>
@@ -231,4 +231,17 @@ export default async function ApplicationDetail({ params }: { params: Promise<{ 
       </div>
     </>
   );
+}
+
+/** Plain-English wording for the application history. */
+const HISTORY: Record<string, string> = {
+  "application.submit": "Submitted", "application.resubmit": "Resubmitted", "application.approve": "Approved and placed in the course",
+  "application.approve_undone": "Approval undone (the student couldn't be placed in a class)",
+  "application.reject": "Rejected", "application.reopen": "Reopened for review", "application.request_corrections": "Corrections requested (email sent)",
+  "application.admin_edit_form": "A form was edited by staff", "application.sign": "A form was signed", "application.set_category": "Enrollment type chosen",
+  "application.set_course": "Course chosen", "application.payment_opened": "Started paying online", "application.checkout_started": "Opened the payment page",
+  "application.payment_received": "Tuition paid online", "application.payment_status": "Payment status changed by staff", "application.view_ssn": "Staff viewed a form with the Social Security number",
+};
+function historyText(action: string) {
+  return HISTORY[action] ?? action.replace("application.", "").replace(/_/g, " ");
 }

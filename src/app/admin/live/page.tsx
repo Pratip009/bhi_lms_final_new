@@ -1,3 +1,4 @@
+import { AttendanceTabs } from "@/components/attendance-tabs";
 import type { Metadata } from "next";
 import { requireAdmin } from "@/lib/auth";
 import { PageHeader } from "@/components/ui";
@@ -11,6 +12,7 @@ export default async function AdminLivePage() {
   await requireAdmin();
   return (
     <>
+      <AttendanceTabs active="today" />
       <PageHeader title="Live attendance" description={`Every class running today (${todayLocal()}). Updates by itself. Open a class to see each student.`} />
       <AdminLiveOverview />
     </>

@@ -48,11 +48,11 @@ export default async function CoursePage({ params }: { params: Promise<{ id: str
           )}
           <p className="mt-4 text-sm"><Link href={`/admin/students?course=${course._id}`} className="text-pine-700 underline">Student list for this course ({activeStudents} active)</Link></p>
         </Card>
-        <Card title="Sections (classes)">
+        <Card title="Classes">
           {list.length === 0 ? (
             <Empty>No classes yet. Create the first class below.</Empty>
           ) : (
-            <Table head={["Section", "Cohort", "Dates", "Section instructors", "Students", ""]}>
+            <Table head={["Class", "Group", "Dates", "Instructors for this class only", "Students", ""]}>
               {list.map((k) => (
                 <tr key={k._id} className={k.archived ? "opacity-60" : undefined}>
                   <Td><Link href={`/admin/classes/${k._id}`} className="font-semibold text-pine-700 underline">{k.code}</Link>{k.archived && <span className="ml-2"><Badge>{k.mergedIntoClassId ? "Merged" : "Archived"}</Badge></span>}</Td>
@@ -66,7 +66,7 @@ export default async function CoursePage({ params }: { params: Promise<{ id: str
             </Table>
           )}
         </Card>
-        {!course.archived && <Card title="Create a section"><ClassForm action={saveClassAction.bind(null, course._id, null)} submitLabel="Create class" /></Card>}
+        {!course.archived && <Card title="Create a class"><ClassForm action={saveClassAction.bind(null, course._id, null)} submitLabel="Create class" /></Card>}
         <Card title="Course details">
           <CourseForm action={saveCourseAction.bind(null, course._id)} values={course} submitLabel="Save course" />
         </Card>

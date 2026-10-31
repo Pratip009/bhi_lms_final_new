@@ -53,7 +53,7 @@ export default async function StudentDashboard() {
           ];
           return (
             <div key={klass._id} className="rounded-lg border border-line bg-white p-5">
-              <p className="text-sm text-slate-500">Section {klass.code} · {klass.cohort}</p>
+              <p className="text-sm text-slate-500">Class {klass.code} · {klass.cohort}</p>
               <h2 className="mt-1 text-lg font-semibold">{course.name}</h2>
               <p className="mt-2 text-sm">{fmtDate(klass.startDate)} to {fmtDate(klass.endDate)}</p>
               {klass.schedule && <p className="text-sm text-slate-600">{klass.schedule}{klass.location ? `, ${klass.location}` : ""}</p>}
@@ -76,7 +76,7 @@ export default async function StudentDashboard() {
               const k = pastClasses.find((x) => x._id === e.classId);
               return (
                 <li key={e._id}>
-                  {k ? `${pastCourses.get(k.courseId)?.name ?? ""}: ${k.code}` : "Section"} · <StatusBadge status={e.status} /> {fmtDate(e.endedAt)}{" "}
+                  {k ? `${pastCourses.get(k.courseId)?.name ?? ""}: ${k.code}` : "Class"} · <StatusBadge status={e.status} /> {fmtDate(e.endedAt)}{" "}
                   <Link href={`/dashboard/attendance/${e._id}`} className="text-pine-700 underline">Attendance</Link>
                 </li>
               );

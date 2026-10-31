@@ -1,3 +1,4 @@
+import { AttendanceTabs } from "@/components/attendance-tabs";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { cols } from "@/db";
@@ -29,6 +30,7 @@ export default async function AdminReports({ searchParams }: { searchParams: Pro
 
   return (
     <>
+      <AttendanceTabs active="reports" />
       <PageHeader title="Monthly progress reports" description={`${submitted} of ${rows.length} active students have a submitted report for ${month}.`} />
       <form className="mb-5 flex items-center gap-2 text-sm">
         <label htmlFor="month">Month</label>

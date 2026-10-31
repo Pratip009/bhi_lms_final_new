@@ -131,3 +131,9 @@ export function fmtDate(d: Date | string | null | undefined) {
   const date = typeof d === "string" ? new Date(d.length === 10 ? d + "T00:00:00" : d) : d;
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
+
+/** Date and time in the office's time zone, e.g. "Oct 31, 2026, 2:05 PM" (never UTC). */
+export function fmtDateTime(d: Date | null | undefined) {
+  if (!d) return "-";
+  return d.toLocaleString("en-US", { timeZone: process.env.APP_TIMEZONE || "America/New_York", month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
+}

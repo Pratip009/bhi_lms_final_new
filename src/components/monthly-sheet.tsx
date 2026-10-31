@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { fmtDateTime } from "./ui";
 import type { loadMonthlySheet } from "@/lib/sheets";
 import { saveDailyEntryAction, signMonthlySheetAction, signMyMonthAction } from "@/lib/actions/sheets";
 import { ATTENDANCE_LABEL } from "@/lib/queries";
@@ -36,7 +37,7 @@ export function MonthlySheet({ sheet, enrollmentId, month, months, basePath, mod
         <dl className="mb-4 grid gap-3 text-sm sm:grid-cols-4">
           <div><dt className="text-slate-500">Student</dt><dd className="font-medium">{studentName}</dd></div>
           <div><dt className="text-slate-500">Course</dt><dd className="font-medium">{sheet.course.name}</dd></div>
-          <div><dt className="text-slate-500">Section</dt><dd className="font-medium">{sheet.klass.code}</dd></div>
+          <div><dt className="text-slate-500">Class</dt><dd className="font-medium">{sheet.klass.code}</dd></div>
           <div><dt className="text-slate-500">Totals</dt><dd className="font-medium">{sheet.totals.hours.toFixed(2)} h · {sheet.totals.present} present · {sheet.totals.absent} absent · {sheet.totals.holiday} holiday</dd></div>
         </dl>
         {days.length === 0 ? <p className="text-sm text-slate-600">No class days in this month yet.</p> : (
@@ -93,7 +94,7 @@ export function MonthlySheet({ sheet, enrollmentId, month, months, basePath, mod
           <div className="mb-4">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={sheet.signoff.signature.imageDataUrl} alt={`Signature of ${sheet.signoff.signature.signerName}`} className="h-14 rounded border border-line bg-white" />
-            <p className="mt-1 text-sm">{sheet.signoff.signature.signerName}, {sheet.signoff.signature.signedAt.toISOString().slice(0, 16).replace("T", " ")} UTC</p>
+            <p className="mt-1 text-sm">{sheet.signoff.signature.signerName}, {fmtDateTime(sheet.signoff.signature.signedAt)}</p>
             {sheet.changedSinceSignoff && <div className="mt-2"><Alert tone="warning">Entries changed after this sign-off. The instructor should review and sign again.</Alert></div>}
             {sheet.signoff.history.length > 0 && (
               <p className="mt-2 text-xs text-slate-500">Earlier sign-offs: {sheet.signoff.history.map((h) => `${h.signature.signerName} (${h.signature.signedAt.toISOString().slice(0, 10)})`).join(", ")}</p>

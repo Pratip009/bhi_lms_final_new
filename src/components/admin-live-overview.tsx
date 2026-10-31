@@ -37,7 +37,7 @@ export function AdminLiveOverview() {
                 <tr key={c.classId}>
                   <td className="px-3 py-2">
                     <Link href={`/admin/classes/${c.classId}#live`} className="font-semibold text-pine-700 underline">{c.name}</Link>
-                    <span className="block text-xs text-slate-500">{c.instructors || "No instructor on the section"}</span>
+                    <span className="block text-xs text-slate-500">{c.instructors || "No instructor assigned"}</span>
                   </td>
                   <td className="px-3 py-2 tabular-nums">{c.open && left > 0 ? <Badge tone="marigold">Open · {mmss(left)}</Badge> : <span className="text-slate-500">Closed</span>}</td>
                   <td className="px-3 py-2 tabular-nums">{c.checkedIn} / {c.enrolled}</td>

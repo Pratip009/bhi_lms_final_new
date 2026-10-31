@@ -37,7 +37,7 @@ export async function SheetView({ user, enrollment, sp, basePath, back }: {
   const header = (
     <>
       {back}
-      <PageHeader title={`Attendance: ${studentName}`} description={`${row.course.name}, section ${row.klass.code}${enrollment.status !== "ACTIVE" ? ` (${enrollment.status.toLowerCase()}; history)` : ""}`} />
+      <PageHeader title={`Attendance: ${studentName}`} description={`${row.course.name}, class ${row.klass.code}${enrollment.status !== "ACTIVE" ? ` (${enrollment.status.toLowerCase()}; history)` : ""}`} />
     </>
   );
 

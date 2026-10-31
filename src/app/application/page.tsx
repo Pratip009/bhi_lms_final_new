@@ -56,7 +56,7 @@ export default async function ApplicationStatusPage({ searchParams }: { searchPa
         {application.status === "APPROVED" && !ended && (
           <Alert tone="success">
             <p className="font-semibold">You're approved.</p>
-            <p className="mt-1">The office is placing you in your course section. Your dashboard opens as soon as that's done, and we'll email you.</p>
+            <p className="mt-1">The office is placing you in a class for your course. Your dashboard opens as soon as that's done, and we'll email you.</p>
           </Alert>
         )}
         {application.status === "REJECTED" && (

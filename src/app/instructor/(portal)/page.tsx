@@ -56,14 +56,14 @@ export default async function InstructorHome({ searchParams }: { searchParams: P
               .filter((e) => !q || people.get(e.studentId)!.name.toLowerCase().includes(q) || people.get(e.studentId)!.email.toLowerCase().includes(q))
               .sort((a, b) => people.get(a.studentId)!.name.localeCompare(people.get(b.studentId)!.name));
             return (
-              <Card key={cid} title={course?.name ?? "Course"} actions={<span className="text-sm text-slate-600">{sections.length} section{sections.length === 1 ? "" : "s"}</span>}>
+              <Card key={cid} title={course?.name ?? "Course"} actions={<span className="text-sm text-slate-600">{sections.length} class{sections.length === 1 ? "" : "es"}</span>}>
                 {sections.length > 0 && (
                   <p className="mb-4 flex flex-wrap gap-3 text-sm">
                     {sections.map((k) => <Link key={k._id} href={`/instructor/classes/${k._id}`} className="text-pine-700 underline">{k.code} ({k.cohort}): roster and daily attendance</Link>)}
                   </p>
                 )}
                 {rows.length === 0 ? <Empty>{q ? "No students match." : "No students enrolled yet."}</Empty> : (
-                  <Table head={["Student", "Program", "Section", "Attendance", `Progress report (${month})`]}>
+                  <Table head={["Student", "Program", "Class", "Attendance", `Progress report (${month})`]}>
                     {rows.map((e) => {
                       const u = people.get(e.studentId)!;
                       const a = apps.get(e.studentId);

@@ -1,3 +1,5 @@
+import { todayLocal } from "@/lib/dates";
+import { AttendanceTabs } from "@/components/attendance-tabs";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { cols } from "@/db";
@@ -14,11 +16,15 @@ export default async function AdminAttendance({ searchParams }: { searchParams: 
   const sp = await searchParams;
   const options = await classOptions();
   const students = await (await cols()).users.find({ role: "STUDENT" }, { projection: { _id: 1, name: 1 } }).sort({ name: 1 }).limit(2000).toArray();
+  // With no filter chosen, show the last 7 days so the page is never empty.
+  const anyFilter = isId(sp.classId) || isId(sp.studentId) || isDate(sp.from) || isDate(sp.to);
+  const today = todayLocal();
+  const weekAgo = todayLocal(new Date(Date.now() - 6 * 86_400_000));
   const q = {
     classId: isId(sp.classId) ? sp.classId : undefined,
     studentId: isId(sp.studentId) ? sp.studentId : undefined,
-    from: isDate(sp.from) ? sp.from : undefined,
-    to: isDate(sp.to) ? sp.to : undefined,
+    from: isDate(sp.from) ? sp.from : anyFilter ? undefined : weekAgo,
+    to: isDate(sp.to) ? sp.to : anyFilter ? undefined : today,
   };
   const filtered = Object.values(q).some(Boolean);
   const rows = filtered ? await searchAttendance({ ...q, limit: 1000 }) : [];
@@ -26,7 +32,8 @@ export default async function AdminAttendance({ searchParams }: { searchParams: 
 
   return (
     <>
-      <PageHeader title="Attendance" description="Filter by class, student or date range." />
+      <AttendanceTabs active="records" />
+      <PageHeader title="Attendance records" description="The last 7 days are shown. Choose a class, student or dates to see others. To mark or correct a day, open the class and choose Daily attendance." />
       <form className="mb-5 grid gap-3 rounded-lg border border-line bg-white p-4 sm:grid-cols-5">
         <select name="classId" defaultValue={sp.classId ?? ""} aria-label="Class" className="rounded-md border border-line bg-white px-3 py-2 text-sm">
           <option value="">All classes</option>
@@ -36,8 +43,8 @@ export default async function AdminAttendance({ searchParams }: { searchParams: 
           <option value="">All students</option>
           {students.map((s) => <option key={s._id} value={s._id}>{s.name}</option>)}
         </select>
-        <input type="date" name="from" defaultValue={sp.from} aria-label="From" className="rounded-md border border-line px-3 py-2 text-sm" />
-        <input type="date" name="to" defaultValue={sp.to} aria-label="To" className="rounded-md border border-line px-3 py-2 text-sm" />
+        <input type="date" name="from" defaultValue={q.from} aria-label="From" className="rounded-md border border-line px-3 py-2 text-sm" />
+        <input type="date" name="to" defaultValue={q.to} aria-label="To" className="rounded-md border border-line px-3 py-2 text-sm" />
         <button className="rounded-md bg-pine-700 px-3 py-2 text-sm font-semibold text-white">Show records</button>
       </form>
       {!filtered ? <Empty>Choose a class, student or date range to see attendance.</Empty> : rows.length === 0 ? <Empty>No records match.</Empty> : (

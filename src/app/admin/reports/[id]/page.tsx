@@ -5,7 +5,7 @@ import { requireAdmin } from "@/lib/auth";
 import { getClassWithCourse } from "@/lib/queries";
 import { ActionButton } from "@/components/action-widgets";
 import { ReportView } from "@/components/report-view";
-import { Badge, PageHeader, fmtDate } from "@/components/ui";
+import { Badge, PageHeader, fmtDate, fmtDateTime } from "@/components/ui";
 import { reopenReportAction } from "../../actions";
 
 export default async function AdminReportPage({ params }: { params: Promise<{ id: string }> }) {
@@ -37,7 +37,7 @@ export default async function AdminReportPage({ params }: { params: Promise<{ id
           <ol className="mt-4 space-y-4">
             {[...r.revisions!].reverse().map((v, i) => (
               <li key={i} className="border-t border-line pt-3 text-sm">
-                <p className="text-slate-500">{v.savedAt.toISOString().slice(0, 16).replace("T", " ")} UTC · {v.status === "SUBMITTED" ? "submitted" : "draft"} · {v.instructorName ?? ""}{v.signature ? ` · signed by ${v.signature.signerName}` : ""}</p>
+                <p className="text-slate-500">{fmtDateTime(v.savedAt)} · {v.status === "SUBMITTED" ? "submitted" : "draft"} · {v.instructorName ?? ""}{v.signature ? ` · signed by ${v.signature.signerName}` : ""}</p>
                 <pre className="mt-1 whitespace-pre-wrap font-sans">{Object.entries(v.data).map(([k, val]) => `${k}: ${String(val ?? "")}`).join("\n")}</pre>
               </li>
             ))}

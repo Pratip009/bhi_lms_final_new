@@ -8,7 +8,7 @@ import { Alert } from "@/components/ui";
 import { attendanceToDo, usersById } from "@/lib/queries";
 import { Card, Empty, PageHeader, Stat, StatusBadge, fmtDate } from "@/components/ui";
 
-export const metadata: Metadata = { title: "Admin dashboard" };
+export const metadata: Metadata = { title: "Home" };
 
 export default async function AdminDashboard() {
   await requireAdmin();
@@ -23,8 +23,7 @@ export default async function AdminDashboard() {
     classes.countDocuments({ archived: false }),
     classes.countDocuments({ archived: false, "instructors.0": { $exists: false } }),
   ]);
-  const [paymentsToRequest, courseCount, coursesWithInstructor] = await Promise.all([
-    applications.countDocuments({ category: "PRIVATE", status: { $in: ["SUBMITTED", "RESUBMITTED"] }, paymentStatus: "PENDING" }),
+  const [courseCount, coursesWithInstructor] = await Promise.all([
     courses.countDocuments({ archived: false }),
     courseAssignments.distinct("courseId", { removedAt: null }),
   ]);
@@ -35,38 +34,48 @@ export default async function AdminDashboard() {
   const toConfirm = await attendanceToDo();
   const confirmClasses = new Map((await classes.find({ _id: { $in: toConfirm.map((t) => t.classId) } }, { projection: { code: 1 } }).toArray()).map((k) => [k._id, k.code]));
 
+  const noFees = await courses.countDocuments({ archived: false, $or: [{ fees: null }, { fees: { $exists: false } }] });
+  const coursesNoInstructor = Math.max(0, courseCount - coursesWithInstructor.length);
+  // Plain-language to-do list: only what needs someone's attention, each with one button.
+  const todo = [
+    { n: pending, text: (n: number) => `${n} application${n === 1 ? "" : "s"} waiting for your review`, href: "/admin/applications?status=PENDING", button: "Review" },
+    { n: instructorsPending, text: (n: number) => `${n} instructor sign-up${n === 1 ? "" : "s"} to approve`, href: "/admin/instructors", button: "Review" },
+    { n: unassigned, text: (n: number) => `${n} approved student${n === 1 ? " has" : "s have"} no class`, href: "/admin/students?filter=unassigned", button: "Place" },
+    { n: toConfirm.length, text: (n: number) => `${n} class day${n === 1 ? "" : "s"} with attendance not finished or not signed`, href: "#days", button: "See days" },
+    { n: coursesNoInstructor, text: (n: number) => `${n} course${n === 1 ? " has" : "s have"} no instructor`, href: "/admin/courses", button: "Assign" },
+    { n: noFees, text: (n: number) => `${n} course${n === 1 ? " has" : "s have"} no Private tuition set`, href: "/admin/courses", button: "Set" },
+  ].filter((t) => t.n > 0);
+
   return (
     <>
-      <PageHeader title="Dashboard" />
-      {(pendingText.length > 0 || eqissTextPending()) && (
-        <div className="mb-6"><Alert tone="warning">
-          <p className="font-semibold">Official wording still to be added before production</p>
-          {pendingText.length > 0 && <p className="mt-1">Enrollment forms using placeholder fields: {pendingText.map((t) => t.title).join(", ")}.</p>}
-          {eqissTextPending() && <p className="mt-1">EQISS biweekly report: customer and instructor certification statements.</p>}
-          <p className="mt-1">See "Waiting on documents" in the README.</p>
-        </Alert></div>
-      )}
-      {courseCount === 0 && <div className="mb-6"><Alert tone="info">No courses yet. <Link href="/admin/courses" className="underline">Add the BHI course list</Link> so students can choose a course when enrolling.</Alert></div>}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <Stat label="Applications to review" value={pending} href="/admin/applications?status=PENDING" />
+      <PageHeader title="Home" description="What needs your attention today." />
+      {courseCount === 0 && <div className="mb-6"><Alert tone="info">No courses yet. Ask your technical admin to load the BHI course list, or <Link href="/admin/courses" className="underline">add courses</Link> yourself.</Alert></div>}
+      <Card title="To do">
+        {todo.length === 0 ? <Empty>Nothing needs your attention right now.</Empty> : (
+          <ul className="divide-y divide-line">
+            {todo.map((t) => (
+              <li key={t.href + t.button} className="flex flex-wrap items-center justify-between gap-3 py-3">
+                <span className="text-base">{t.text(t.n)}</span>
+                <Link href={t.href} className="rounded-md bg-pine-700 px-4 py-1.5 text-sm font-semibold text-white">{t.button}</Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+      <div className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <Stat label="Students in class now" value={active} href="/admin/students" />
         <Stat label="Waiting on student corrections" value={corrections} href="/admin/applications?status=CORRECTIONS_REQUESTED" />
-        <Stat label="Private: payment to request" value={paymentsToRequest} href="/admin/applications?status=PAYMENT" />
-        <Stat label="Approved, no section yet" value={unassigned} href="/admin/students?filter=unassigned" />
-        <Stat label="Active class enrollments" value={active} href="/admin/students" />
+        <Stat label="Classes running" value={activeClasses} href="/admin/courses" />
         <Stat label="Approved students" value={approvedIds.length} href="/admin/students" />
-        <Stat label="Courses with no instructor" value={Math.max(0, courseCount - coursesWithInstructor.length)} href="/admin/courses" />
-        <Stat label="Active classes" value={activeClasses} href="/admin/courses" />
-        <Stat label="Monthly reports" value="View" href="/admin/reports" />
-        {instructorsPending > 0 && <Stat label="Older instructor sign-ups to approve" value={instructorsPending} href="/admin/instructors" />}
       </div>
       {toConfirm.length > 0 && (
-        <div className="mt-8">
-          <Card title={`Class days not completed or signed by instructors (${toConfirm.length})`} actions={<Link href="/admin/live" className="text-sm font-semibold text-pine-700 underline">Live attendance</Link>}>
+        <div className="mt-8" id="days">
+          <Card title="Class days to finish or sign">
             <ul className="divide-y divide-line text-sm">
-              {toConfirm.slice(0, 10).map((t) => (
+              {toConfirm.slice(0, 15).map((t) => (
                 <li key={`${t.classId}:${t.date}`} className="flex justify-between gap-3 py-2">
-                  <Link href={`/admin/classes/${t.classId}`} className="font-semibold text-pine-700 underline">{confirmClasses.get(t.classId) ?? "Class"}</Link>
-                  <span>{fmtDate(t.date)}: {[t.pending ? `${t.pending} not filled out` : "", t.unsigned ? "not signed" : ""].filter(Boolean).join(", ")}</span>
+                  <Link href={`/admin/classes/${t.classId}/attendance?date=${t.date}`} className="font-semibold text-pine-700 underline">{confirmClasses.get(t.classId) ?? "Class"}, {fmtDate(t.date)}</Link>
+                  <span>{[t.pending ? `${t.pending} not filled in` : "", t.unsigned ? "not signed" : ""].filter(Boolean).join(", ")}</span>
                 </li>
               ))}
             </ul>
@@ -92,6 +101,11 @@ export default async function AdminDashboard() {
           )}
         </Card>
       </div>
+      {(pendingText.length > 0 || eqissTextPending()) && (
+        <p className="mt-8 text-xs text-slate-500">
+          Still waiting for official wording from BHI: {[...pendingText.map((t) => t.title), ...(eqissTextPending() ? ["EQISS report declarations"] : [])].join(", ")}.
+        </p>
+      )}
     </>
   );
 }

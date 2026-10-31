@@ -48,7 +48,7 @@ export default async function StudentsPage({ searchParams }: { searchParams: Pro
 
   return (
     <>
-      <PageHeader title="Students" description="Approved students, their course sections and attendance sheets. Approval places students in their chosen course automatically." />
+      <PageHeader title="Students" description="Approved students, their classes and attendance sheets. Approval places students in their chosen course automatically." />
       <div className="mb-4 flex flex-wrap items-center gap-2">
         {[["", "All approved"], ["unassigned", "No class yet"]].map(([k, l]) => (
           <Link key={k} href={`/admin/students${k ? `?filter=${k}` : ""}`}
@@ -73,7 +73,7 @@ export default async function StudentsPage({ searchParams }: { searchParams: Pro
       {rows.length === 0 ? (
         <Empty>No students match.</Empty>
       ) : (
-        <Table head={["Student", "Program", "Sections and attendance", "Add to another section"]}>
+        <Table head={["Student", "Program", "Classes and attendance", "Add to another class"]}>
           {rows.map(({ user, label, classes: ks }) => (
             <tr key={user._id}>
               <Td><Link href={`/admin/students/${user._id}`} className="font-semibold text-pine-700 underline">{user.name}</Link><p className="text-slate-500">{user.email}</p></Td>

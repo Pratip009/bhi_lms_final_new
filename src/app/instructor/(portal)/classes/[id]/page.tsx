@@ -46,14 +46,17 @@ export default async function InstructorClass({ params, searchParams }: { params
           ))}
         </Alert></div>
       )}
-      <Card title="Class settings" className="mb-6">
+      <details className="mb-6 rounded-lg border border-line bg-white p-5">
+        <summary className="cursor-pointer font-semibold">Class times, late rule and check-in</summary>
+        <div className="mt-4">
         <ClassSettingsForm studentCount={roster.length} save={saveClassSettingsAction.bind(null, id)} sendLink={sendClassroomLinkAction.bind(null, id)}
           settings={{
             classroomUrl: klass.classroomUrl ?? "", classroomSentAt: klass.classroomSentAt ? `${localDateOf(klass.classroomSentAt)} ${timeLocal(klass.classroomSentAt)}` : null,
             sessionStart: klass.sessionStart ?? "", sessionEnd: klass.sessionEnd ?? "", breakStart: klass.breakStart ?? "", breakEnd: klass.breakEnd ?? "",
               checkInEnabled: !!klass.checkInEnabled, lateAfterMinutes: klass.lateAfterMinutes ?? null,
           }} />
-      </Card>
+      </div>
+      </details>
       <form className="mb-4 flex items-center gap-2 text-sm">
         <label htmlFor="month">Progress reports for</label>
         <input id="month" type="month" name="month" defaultValue={month} max={currentMonth} className="rounded-md border border-line px-2 py-1" />

@@ -68,19 +68,11 @@ export default async function AdminClassPage({ params }: { params: Promise<{ id:
             <a href={`/api/export/attendance?classId=${klass._id}`} className="rounded-md border border-line bg-white px-4 py-2 text-sm font-semibold">Export CSV</a>
           </>
         } />
-      {mergedInto && <p className="mb-4 rounded-md bg-mist p-3 text-sm">This section was merged into <Link href={`/admin/classes/${klass.mergedIntoClassId}`} className="font-semibold underline">{mergedInto.code}</Link> on {fmtDate(klass.mergedAt)}. Its records are kept here.</p>}
+      {mergedInto && <p className="mb-4 rounded-md bg-mist p-3 text-sm">This class was merged into <Link href={`/admin/classes/${klass.mergedIntoClassId}`} className="font-semibold underline">{mergedInto.code}</Link> on {fmtDate(klass.mergedAt)}. Its records are kept here.</p>}
       <div className="mb-6 flex flex-wrap gap-3">
         <Link href={`/admin/classes/${klass._id}/attendance`} className="rounded-md bg-pine-700 px-4 py-2 text-sm font-semibold text-white">Daily attendance</Link>
       </div>
       <div className="space-y-6">
-        <Card title="Class settings">
-          <ClassSettingsForm studentCount={activeIds.size} save={saveClassSettingsAction.bind(null, klass._id)} sendLink={sendClassroomLinkAction.bind(null, klass._id)}
-            settings={{
-              classroomUrl: klass.classroomUrl ?? "", classroomSentAt: klass.classroomSentAt ? `${localDateOf(klass.classroomSentAt)} ${timeLocal(klass.classroomSentAt)}` : null,
-              sessionStart: klass.sessionStart ?? "", sessionEnd: klass.sessionEnd ?? "", breakStart: klass.breakStart ?? "", breakEnd: klass.breakEnd ?? "",
-              checkInEnabled: !!klass.checkInEnabled, lateAfterMinutes: klass.lateAfterMinutes ?? null,
-            }} />
-        </Card>
         <Card title={`Roster (${activeIds.size}/${klass.capacity})`}>
           {roster.length === 0 ? <Empty>No students yet.</Empty> : (
             <Table head={["Student", "Program", "Status", "Attended", "Attendance sheet", `Report ${thisMonth}`, ""]}>
@@ -102,7 +94,7 @@ export default async function AdminClassPage({ params }: { params: Promise<{ id:
                         <summary className="cursor-pointer text-sm font-semibold text-pine-700">Move / withdraw</summary>
                         <div className="mt-3 w-64 space-y-4">
                           {moveTargets.length > 0 && <MoveStudentForm action={moveStudentAction} enrollmentId={enrollment._id} sections={moveTargets} />}
-                          <ActionButton action={endEnrollmentAction} label="Withdraw" variant="ghost" hidden={{ enrollmentId: enrollment._id, status: "WITHDRAWN" }} confirm={`Withdraw ${student.name} from this section? Records are kept.`} />
+                          <ActionButton action={endEnrollmentAction} label="Withdraw" variant="ghost" hidden={{ enrollmentId: enrollment._id, status: "WITHDRAWN" }} confirm={`Withdraw ${student.name} from this class? Records are kept.`} />
                         </div>
                       </details>
                     )}</Td>
@@ -118,13 +110,11 @@ export default async function AdminClassPage({ params }: { params: Promise<{ id:
             </div>
           )}
         </Card>
-
-        {!klass.archived && mergeable.length > 0 && (
-          <Card title="Merge sections"><MergeSectionsForm action={mergeSectionsAction.bind(null, klass._id)} sections={mergeable} /></Card>
-        )}
         <Card title="Instructors">
-          <p className="mb-4 text-sm">Course instructors (have access to every section): {[...courseInstructors.values()].map((u) => u.name).join(", ") || <span className="text-marigold-700">none. <Link href={`/admin/courses/${course._id}`} className="underline">Assign on the course page</Link></span>}</p>
-          <h3 className="mb-2 text-sm font-semibold">Assigned to this section only</h3>
+          <p className="mb-4 text-sm">Course instructors (teach every class of this course): {[...courseInstructors.values()].map((u) => u.name).join(", ") || <span className="text-marigold-700">none. <Link href={`/admin/courses/${course._id}`} className="underline">Assign on the course page</Link></span>}</p>
+          <details className="rounded-md border border-line p-3">
+          <summary className="cursor-pointer text-sm font-semibold">Extra instructors for this class only (optional)</summary>
+          <div className="mt-3">
           {instructors.length === 0 ? <p className="mb-4 text-sm text-marigold-700">No instructor assigned.</p> : (
             <ul className="mb-5 divide-y divide-line">
               {instructors.map((i) => (
@@ -140,8 +130,9 @@ export default async function AdminClassPage({ params }: { params: Promise<{ id:
           ) : (
             <p className="text-sm text-slate-600">No approved instructors yet. <Link href="/admin/instructors" className="underline">Review instructor sign-ups</Link>.</p>
           )}
+          </div>
+          </details>
         </Card>
-
         <Card title="Instructor history">
           {teachingHistory.length === 0 ? <Empty>No instructor has been assigned yet.</Empty> : (
             <Table head={["Instructor", "Assigned to", "Started", "Stopped"]}>
@@ -157,10 +148,28 @@ export default async function AdminClassPage({ params }: { params: Promise<{ id:
           )}
           <p className="mt-3 text-xs text-slate-500">Attendance and reports an instructor wrote stay on record after they stop teaching the class.</p>
         </Card>
-
+        <details className="rounded-lg border border-line bg-white p-5">
+          <summary className="cursor-pointer font-semibold">Class times, late rule and check-in</summary>
+          <div className="mt-4">
+          <ClassSettingsForm studentCount={activeIds.size} save={saveClassSettingsAction.bind(null, klass._id)} sendLink={sendClassroomLinkAction.bind(null, klass._id)}
+            settings={{
+              classroomUrl: klass.classroomUrl ?? "", classroomSentAt: klass.classroomSentAt ? `${localDateOf(klass.classroomSentAt)} ${timeLocal(klass.classroomSentAt)}` : null,
+              sessionStart: klass.sessionStart ?? "", sessionEnd: klass.sessionEnd ?? "", breakStart: klass.breakStart ?? "", breakEnd: klass.breakEnd ?? "",
+              checkInEnabled: !!klass.checkInEnabled, lateAfterMinutes: klass.lateAfterMinutes ?? null,
+            }} />
+        </div>
+        </details>
+        <details className="rounded-lg border border-line bg-white p-5">
+          <summary className="cursor-pointer font-semibold">Advanced: edit class dates, merge classes, archive</summary>
+          <div className="mt-4 space-y-6">
+        {!klass.archived && mergeable.length > 0 && (
+          <Card title="Merge other classes into this one"><MergeSectionsForm action={mergeSectionsAction.bind(null, klass._id)} sections={mergeable} /></Card>
+        )}
         <Card title="Class details" actions={<ActionButton action={archiveClassAction.bind(null, klass._id)} label={klass.archived ? "Restore" : "Archive"} variant="ghost" confirm={klass.archived ? undefined : "Archive this class? Its records are kept."} />}>
           <ClassForm action={saveClassAction.bind(null, course._id, klass._id)} values={klass} submitLabel="Save class" />
         </Card>
+          </div>
+        </details>
       </div>
     </>
   );

@@ -8,27 +8,27 @@ export const metadata = { title: "Admin guide | BHI LMS" };
  */
 const ROUTES: Record<string, string | undefined> = {
   dashboard: "/admin",
-  courses: undefined, // e.g. "/admin/courses"
-  classes: undefined, // e.g. "/admin/classes"
-  instructors: undefined, // e.g. "/admin/instructors"
+  courses: "/admin/courses",
+  classes: "/admin/courses",
+  instructors: "/admin/instructors",
   applications: "/admin/applications",
 };
 
 const CHAIN = [
   { name: "Course", note: "What students choose when they enroll" },
   { name: "Class", note: "One running group of that course" },
-  { name: "Teacher", note: "Assigned to the class by you" },
+  { name: "Instructor", note: "Assigned to the class by you" },
   { name: "Students", note: "Approved by you, placed in the class" },
-  { name: "Attendance and reports", note: "Teachers record them, you watch them" },
+  { name: "Attendance and reports", note: "Instructors record them, you watch them" },
 ];
 
 const ROLES = [
   {
     who: "You (admin)",
-    can: "Create courses and classes, approve teachers and students, assign teachers, place students, monitor everything.",
+    can: "Create courses and classes, approve instructors and students, assign instructors, place students, monitor everything.",
   },
   {
-    who: "Teacher",
+    who: "Instructor",
     can: "Sees only the classes you assign. Takes attendance and writes monthly progress reports.",
   },
   {
@@ -91,32 +91,32 @@ const STEPS: Step[] = [
     routeLabel: "Open classes",
   },
   {
-    id: "teachers",
-    title: "Add and approve teachers",
-    why: "A teacher cannot see or do anything until you approve their account.",
+    id: "instructors",
+    title: "Add and approve instructors",
+    why: "A instructor cannot see or do anything until you approve their account.",
     actions: [
-      "Teachers sign up themselves at the instructor sign-up page, or you invite them from the admin side.",
-      "Open the instructors list and find the new teacher marked as waiting.",
+      "Instructors sign up themselves at the instructor sign-up page, or you invite them from the admin side.",
+      "Open the instructors list and find the new instructor marked as waiting.",
       "Approve them.",
     ],
-    done: "The teacher shows as approved in the instructors list.",
+    done: "The instructor shows as approved in the instructors list.",
     route: "instructors",
-    routeLabel: "Open teachers",
+    routeLabel: "Open instructors",
   },
   {
     id: "assign",
-    title: "Assign teachers to courses and classes",
-    why: "This is the step that makes a teacher see their students.",
+    title: "Assign instructors to courses and classes",
+    why: "This is the step that makes a instructor see their students.",
     actions: [
-      "From a class page: pick the teacher and assign them.",
-      "Or from a teacher page: pick the class (classes are listed by course).",
-      "To change the lead teacher, choose Replace current lead. The old lead becomes an assistant.",
-      "Add more teachers to the same class as assistants if needed.",
+      "From a class page: pick the instructor and assign them.",
+      "Or from a instructor page: pick the class (classes are listed by course).",
+      "To change the lead instructor, choose Replace current lead. The old lead becomes an assistant.",
+      "Add more instructors to the same class as assistants if needed.",
     ],
-    done: "The class page shows its lead teacher, and the teacher received an email.",
-    tip: "Each class has one lead. You cannot assign archived classes or disabled accounts. The dashboard counts classes with no teacher: aim for zero.",
+    done: "The class page shows its lead instructor, and the instructor received an email.",
+    tip: "Each class has one lead. You cannot assign archived classes or disabled accounts. The dashboard counts classes with no instructor: aim for zero.",
     route: "instructors",
-    routeLabel: "Open teachers",
+    routeLabel: "Open instructors",
   },
   {
     id: "applications",
@@ -127,7 +127,7 @@ const STEPS: Step[] = [
       "Check the forms, documents and signatures.",
       "Approve: the student is enrolled in the course they chose.",
       "Reject: the application is declined. You can reopen it later.",
-      "Request resubmission: write a note saying what to fix. The student gets it by email and only the flagged sections reopen.",
+      "Request resubmission: write a note saying what to fix. The student gets it by email and only the parts you tick reopen.",
       "After approving, place the student in a class from the class page.",
     ],
     done: "The application is no longer waiting, and approved students appear in a class.",
@@ -149,7 +149,7 @@ const CHECKS = [
     often: "Daily",
   },
   {
-    where: "Classes with no teacher",
+    where: "Classes with no instructor",
     tells: "Classes with students that nobody is teaching.",
     often: "Daily",
   },
@@ -165,7 +165,7 @@ const CHECKS = [
   },
   {
     where: "Monthly progress reports",
-    tells: "One report per student per month, signed by the teacher.",
+    tells: "One report per student per month, signed by the instructor.",
     often: "Monthly",
   },
   {
@@ -181,12 +181,12 @@ const PROBLEMS = [
     fix: "No courses exist yet. Create them in step 2.",
   },
   {
-    problem: "A teacher cannot see any students.",
+    problem: "A instructor cannot see any students.",
     fix: "They are not approved (step 4), or not assigned to the class (step 5).",
   },
   {
-    problem: "I cannot assign a teacher.",
-    fix: "The class is archived or the teacher account is disabled.",
+    problem: "I cannot assign a instructor.",
+    fix: "The class is archived or the instructor account is disabled.",
   },
   {
     problem: "I cannot put a student in a class.",
@@ -379,9 +379,9 @@ export default function AdminGuidePage() {
 
             <p className="mt-5 rounded-lg bg-[#EEF4F1] px-4 py-3 text-sm">
               <span className="font-semibold text-[#1F4E46]">How attendance works: </span>
-              a teacher (or you, from the class page) starts a check-in. Students enter a
+              a instructor (or you, from the class page) starts a check-in. Students enter a
               6-digit code that changes every 30 seconds. When check-in closes, the sheet is
-              pre-filled and the teacher reviews it. The saved sheet is the official record.
+              pre-filled and the instructor reviews it. The saved sheet is the official record.
             </p>
 
             <p className="mt-3 rounded-lg border border-[#E8D3A3] bg-[#FBF4E2] px-4 py-3 text-sm text-[#5C4513]">

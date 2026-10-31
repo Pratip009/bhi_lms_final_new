@@ -216,9 +216,9 @@ export function AddInstructorForm({ action }: { action: (prev: ActionState, fd: 
 /** Class page: move one student to another section (optionally of another course). */
 export function MoveStudentForm({ action, enrollmentId, sections }: { action: Act; enrollmentId: string; sections: { id: string; label: string }[] }) {
   return (
-    <ActionForm action={action} className="space-y-2" confirm="Move this student? Their records so far stay with this section.">
+    <ActionForm action={action} className="space-y-2" confirm="Move this student? Their records so far stay with this class.">
       <input type="hidden" name="enrollmentId" value={enrollmentId} />
-      <SelectById name="targetClassId" label="Move to section" options={sections} />
+      <SelectById name="targetClassId" label="Move to class" options={sections} />
       <div className="flex flex-wrap gap-3 text-xs text-slate-600">
         <label className="flex items-center gap-1"><input type="checkbox" name="allowCourseChange" className="accent-pine-700" /> Change course</label>
         <label className="flex items-center gap-1"><input type="checkbox" name="fundingMismatch" className="accent-pine-700" /> Allow funding mismatch</label>
@@ -231,9 +231,9 @@ export function MoveStudentForm({ action, enrollmentId, sections }: { action: Ac
 /** Class page: merge other sections of the same course into this one. */
 export function MergeSectionsForm({ action, sections }: { action: Act; sections: { id: string; label: string }[] }) {
   return (
-    <ActionForm action={action} className="space-y-3" confirm="Merge the selected sections into this one? Their students move here and the merged sections are archived with their records kept.">
+    <ActionForm action={action} className="space-y-3" confirm="Merge the selected classes into this one? Their students move here and the merged classes are archived with their records kept.">
       <MergePicker sections={sections} />
-      <Submit variant="secondary">Merge into this section</Submit>
+      <Submit variant="secondary">Merge into this class</Submit>
     </ActionForm>
   );
 }
@@ -241,7 +241,7 @@ function MergePicker({ sections }: { sections: { id: string; label: string }[] }
   const { state } = useFormCtx();
   return (
     <fieldset>
-      <legend className="mb-2 text-sm font-medium">Sections to merge in</legend>
+      <legend className="mb-2 text-sm font-medium">Classes to merge in</legend>
       <div className="grid gap-2 sm:grid-cols-2">
         {sections.map((s) => (
           <label key={s.id} className="flex items-center gap-2 rounded-md border border-line px-3 py-2 text-sm">

@@ -81,7 +81,7 @@ export default async function InstructorDetail({ params, searchParams }: { param
           <p className="mt-4 text-xs text-slate-500">Earlier: {assignments.filter((a) => a.removedAt).map((a) => `${courseName.get(a.courseId) ?? "course"} (${fmtDate(a.assignedAt)} to ${fmtDate(a.removedAt)})`).join("; ")}</p>
         )}
       </Card>
-      <Card title="Assign to a single section (optional)" className="mb-6">
+      <Card title="Assign to one class only (optional)" className="mb-6">
         {!canAssign ? (
           <p className="text-sm text-slate-600">{inst.disabledAt ? "This account is disabled. Re-enable it to assign classes." : "Only approved instructors can be assigned to classes."}</p>
         ) : classOptions.length === 0 ? (
@@ -93,7 +93,7 @@ export default async function InstructorDetail({ params, searchParams }: { param
           </>
         )}
       </Card>
-      {ks.length === 0 ? <Empty>No sections yet in this instructor's courses.</Empty> : (
+      {ks.length === 0 ? <Empty>No classes yet in this instructor's courses.</Empty> : (
         <div className="space-y-6">
           {ks.map((klass, i) => {
             const role = klass.instructors.find((x) => x.instructorId === id)?.role;
@@ -102,7 +102,7 @@ export default async function InstructorDetail({ params, searchParams }: { param
                 actions={<div className="flex items-center gap-3">
                   {klass.archived && <Badge tone="neutral">Archived</Badge>}
                   <Link href={`/admin/classes/${klass._id}`} className="text-sm text-pine-700 underline">Class page</Link>
-                  {role && <ActionButton action={removeInstructorAction.bind(null, klass._id)} label="Remove from section" variant="ghost" hidden={{ instructorId: inst._id }} confirm={`Remove ${inst.name} from ${klass.code}?`} />}
+                  {role && <ActionButton action={removeInstructorAction.bind(null, klass._id)} label="Remove from class" variant="ghost" hidden={{ instructorId: inst._id }} confirm={`Remove ${inst.name} from ${klass.code}?`} />}
                 </div>}>
                 <p className="mb-3 text-sm text-slate-600">{fmtDate(klass.startDate)} to {fmtDate(klass.endDate)}</p>
                 {rosters[i].length === 0 ? <Empty>No students in this class.</Empty> : (

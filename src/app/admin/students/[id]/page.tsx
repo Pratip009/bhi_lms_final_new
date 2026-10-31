@@ -41,7 +41,7 @@ export default async function StudentRecord({ params }: { params: Promise<{ id: 
         </>} />
       {student.disabledAt && <p className="mb-4 text-sm font-semibold text-brick-600">This account is disabled (since {fmtDate(student.disabledAt)}).</p>}
       {app?.status === "APPROVED" && (
-        <Card title="Add to a section" className="mb-6">
+        <Card title="Add to a class" className="mb-6">
           {options.length ? <AssignClassForm action={assignStudentAction} studentId={student._id} classes={options} /> : <p className="text-sm">No active classes. <Link href="/admin/courses" className="underline">Create one</Link>.</p>}
         </Card>
       )}
