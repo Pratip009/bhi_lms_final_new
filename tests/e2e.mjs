@@ -132,7 +132,6 @@ const COMMON = {
   emergency_medical: { contactName: "Luis Rivera", relationship: "Brother", contactPhone: "201-555-0101", acknowledged: "on" },
   workforce_registration: { acknowledged: "on" },
   grievance_policy: { acknowledged: "on" },
-  laptop_receipt: { acknowledged: "on" },
   photo_release: { photoRelease: "I give permission" },
 };
 const NONPRIVATE = { nonprivate_agreement: { acknowledged: "on" } };

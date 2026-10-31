@@ -132,7 +132,6 @@ const answers = {
   emergency_medical: { contactName: "Luis Rivera", relationship: "Brother", contactPhone: "201-555-0101", acknowledged: "on" },
   workforce_registration: { acknowledged: "on" },
   grievance_policy: { acknowledged: "on" },
-  laptop_receipt: { acknowledged: "on" },
   photo_release: { photoRelease: "I give permission" },
   nonprivate_agreement: { acknowledged: "on" },
   private_agreement_1: { acknowledged: "on" },
@@ -140,7 +139,7 @@ const answers = {
   refund_schedule: { acknowledged: "on" },
 };
 const SIGNED = new Set(Object.keys(answers).filter((k) => k !== "student_data" && k !== "educational_background"));
-const COMMON_KEYS = ["student_data", "educational_background", "background_check", "emergency_medical", "workforce_registration", "grievance_policy", "laptop_receipt", "photo_release"];
+const COMMON_KEYS = ["student_data", "educational_background", "background_check", "emergency_medical", "workforce_registration", "grievance_policy", "photo_release"];
 
 async function registerAndVerify(c, kind, name, email) {
   const r = await c.action(kind === "student" ? "/register" : "/register/instructor", "registerAction",

@@ -21,6 +21,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
       <div className="mt-6 flex flex-wrap justify-between gap-2 text-sm">
         <Link href="/forgot-password" className="text-pine-700 underline">Forgot password?</Link>
         <Link href="/register" className="font-semibold text-pine-700 underline">New student? Create an account</Link>
+        <Link href="/register/instructor" className="font-semibold text-pine-700 underline">Instructor? Sign up here</Link>
       </div>
     </>
   );

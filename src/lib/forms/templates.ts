@@ -7,8 +7,9 @@ import type { Category, County, EnrollmentType, NonPrivateProgram } from "@/db/t
  *   Common Forms (every student, defined once and reused):
  *     1. Student Data / Information        5. Workforce Registration Form
  *     2. Educational Background            6. Grievance Policy and Procedures
- *     3. Background Check Form             7. Laptop Receipt Confirmation / Acknowledgment
- *     4. Emergency Medical Statement       8. Photo Release Form
+ *     3. Background Check Form             7. Photo Release Form
+ *     4. Emergency Medical Statement
+ *   (The Laptop Receipt Confirmation is signed in person when the laptop is collected, not online.)
  *   Private Forms:      Private Enrollment Agreement (page 1, page 2), Tuition Refund Schedule
  *   Non-Private Forms:  Non-Private Enrollment Agreement
  *
@@ -145,11 +146,6 @@ export const TEMPLATES: FormTemplate[] = [
     key: "grievance_policy", title: "Grievance Policy and Procedures", version: 1, group: "COMMON", appliesTo: "ALL",
     containsFees: false, requiresSignature: true, pendingOfficialText: true,
     fields: [ack("Grievance Policy and Procedures")],
-  },
-  {
-    key: "laptop_receipt", title: "Laptop Receipt Confirmation / Acknowledgment", version: 1, group: "COMMON", appliesTo: "ALL",
-    containsFees: false, requiresSignature: true, pendingOfficialText: true,
-    fields: [ack("Laptop Receipt Confirmation / Acknowledgment")],
   },
   {
     key: "photo_release", title: "Photo Release Form", version: 1, group: "COMMON", appliesTo: "ALL",

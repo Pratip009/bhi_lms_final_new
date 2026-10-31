@@ -32,11 +32,10 @@ export default async function StudentDashboard() {
     <StudentShell name={user.name} step={4}>
       <PageHeader title={`Welcome, ${user.name.split(" ")[0]}`} description="Your courses, class information and attendance." />
       <Card title="My information" className="mb-6">
-        <dl className="grid gap-3 text-sm sm:grid-cols-4">
+        <dl className="grid gap-3 text-sm sm:grid-cols-3">
           <div><dt className="text-slate-500">Name</dt><dd className="font-medium">{user.name}</dd></div>
           <div><dt className="text-slate-500">Email</dt><dd className="font-medium">{user.email}</dd></div>
           <div><dt className="text-slate-500">Enrollment</dt><dd className="font-medium">{describeEnrollment(application)}</dd></div>
-          <div><dt className="text-slate-500">Application</dt><dd><StatusBadge status={application.status} /></dd></div>
         </dl>
         <p className="mt-3 text-xs text-slate-500">Your Google Classroom link is on each class below once your instructor shares it.</p>
       </Card>

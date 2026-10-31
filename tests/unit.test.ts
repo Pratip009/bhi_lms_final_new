@@ -27,7 +27,7 @@ test("Non-Private tracks (EQISS, DFS) never receive fee templates, even if misco
   }
 });
 
-const COMMON = ["student_data", "educational_background", "background_check", "emergency_medical", "workforce_registration", "grievance_policy", "laptop_receipt", "photo_release"];
+const COMMON = ["student_data", "educational_background", "background_check", "emergency_medical", "workforce_registration", "grievance_policy", "photo_release"];
 
 test("every track gets the 8 Common Forms once, in the packet order", () => {
   for (const c of ["PRIVATE", "EQISS", "DFS"] as const) {
