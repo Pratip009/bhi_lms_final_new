@@ -146,7 +146,7 @@ export default async function ApplicationDetail({ params }: { params: Promise<{ 
                   confirm={state.ready ? undefined : "This application looks incomplete. Approve anyway?"} />
               </Card>
               <Card title="Request corrections">
-                <CorrectionsForm action={requestCorrectionsAction.bind(null, app._id)}
+                <CorrectionsForm action={requestCorrectionsAction.bind(null, app._id)} to={student.email} studentName={student.name}
                   sections={ALL_SECTIONS(app).map((k) => ({ key: k, label: sectionLabel(k) }))} />
               </Card>
             </>

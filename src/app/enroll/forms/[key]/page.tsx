@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { requireStudentStage } from "@/lib/auth";
-import { canEdit, editableSections, enrollmentState } from "@/lib/enrollment";
+import { canEdit, editableSections, enrollmentState, nextStepPath, openCorrection } from "@/lib/enrollment";
 import { bodyOf, getTemplate } from "@/lib/forms/templates";
 import { prefillValues, templateContext } from "@/lib/forms/context";
 import { FormBody } from "@/components/form-body";
@@ -20,6 +20,7 @@ export default async function FormPage({ params }: { params: Promise<{ key: stri
   if (!template) notFound();
 
   const editable = editableSections(application);
+  const correction = application.status === "CORRECTIONS_REQUESTED" ? openCorrection(application) : null;
   const locked = !canEdit(editable, template.key);
   const state = enrollmentState(application);
   const current = state.forms.find((f) => f.template.key === key)!;
@@ -29,7 +30,13 @@ export default async function FormPage({ params }: { params: Promise<{ key: stri
   return (
     <StudentShell name={user.name} step={1} nav={<EnrollNav app={application} active={key} />}>
       <PageHeader title={template.title} />
-      {locked && <div className="mb-5"><Alert tone="info">This section is locked while your application is being corrected. Only flagged sections can be changed.</Alert></div>}
+      {correction && !locked && (
+        <div className="mb-5"><Alert tone="warning">
+          <p className="font-semibold">Please update this form. Note from the admissions team:</p>
+          <p className="mt-1 whitespace-pre-wrap">{correction.note}</p>
+        </Alert></div>
+      )}
+      {locked && <div className="mb-5"><Alert tone="info">This section is locked while your application is being corrected. Only the sections listed in the correction email can be changed. <a href={nextStepPath(application)} className="font-semibold underline">Go to the next section to update</a></Alert></div>}
       <Card>
         <FormBody paragraphs={bodyOf(template, ctx)} />
         <FormStep

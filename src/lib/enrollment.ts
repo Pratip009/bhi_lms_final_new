@@ -54,6 +54,49 @@ export function enrollmentState(app: Application, gate: PaymentGate = paymentGat
   return { forms, requirements, missing, ready: missing.length === 0, formsLocked: formsBlockedByPayment(app, gate) };
 }
 
+/** Steps of the student's enrollment, in order. Keys are section keys (as used for corrections). */
+export function stepOrder(app: Pick<Application, "category">): string[] {
+  return [SECTION_CATEGORY, SECTION_COURSE, ...(app.category === "PRIVATE" ? ["payment"] : []), ...templatesFor(app.category).map((t) => t.key), SECTION_DOCUMENTS, "review"];
+}
+
+export function stepPath(key: string): string {
+  if (key === SECTION_CATEGORY) return "/enroll";
+  if (key === SECTION_COURSE) return "/enroll/course";
+  if (key === "payment") return "/enroll/payment";
+  if (key === SECTION_DOCUMENTS) return "/enroll/documents";
+  if (key === "review") return "/enroll/review";
+  return `/enroll/forms/${key}`;
+}
+
+/**
+ * Where "Continue" / "Save and continue" goes next.
+ *  - While correcting: the next section the office flagged (after `after`), then Review. Locked
+ *    sections are skipped, so the student goes straight to what the correction email asked for.
+ *  - Otherwise: the next step in order, or (with no `after`) the first unfinished step.
+ */
+export function nextStepPath(app: Application, after?: string): string {
+  const order = stepOrder(app);
+  const correction = app.status === "CORRECTIONS_REQUESTED" ? openCorrection(app) : null;
+  if (correction) {
+    const from = after ? order.indexOf(after) : -1;
+    const next = order.find((k, i) => i > from && correction.sections.includes(k));
+    return stepPath(next ?? "review");
+  }
+  if (!app.category) return "/enroll";
+  if (!app.courseId) return "/enroll/course";
+  if (formsBlockedByPayment(app)) return "/enroll/payment";
+  if (after) {
+    const i = order.indexOf(after);
+    const next = order.slice(i + 1).find((k) => k !== "payment" && k !== SECTION_COURSE && k !== SECTION_CATEGORY);
+    return stepPath(next ?? "review");
+  }
+  const s = enrollmentState(app);
+  const open = s.forms.find((f) => !f.complete || !f.signed);
+  if (open) return stepPath(open.template.key);
+  if (s.requirements.some((r) => r.req.required && r.files.length === 0)) return stepPath(SECTION_DOCUMENTS);
+  return stepPath("review");
+}
+
 export const ALL_SECTIONS = (app: Application) => [SECTION_CATEGORY, SECTION_COURSE, ...templatesFor(app.category).map((t) => t.key), SECTION_DOCUMENTS];
 
 // ---------- Enrollment choice changes ----------

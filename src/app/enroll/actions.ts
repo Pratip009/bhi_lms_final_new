@@ -15,7 +15,7 @@ import { courseServes } from "@/lib/courses";
 import { paymentSettled } from "@/lib/payment";
 import { invalid, type ActionState } from "@/lib/action";
 import { coerceRaw, documentsFor, getTemplate, inputFields, rawFromForm, schemaFor, templatesFor, SECTION_CATEGORY, SECTION_COURSE, SECTION_DOCUMENTS } from "@/lib/forms/templates";
-import { answersHash, canEdit, editableSections, enrollmentState, openCorrection, selectionUpdate, validateSelection } from "@/lib/enrollment";
+import { answersHash, canEdit, editableSections, enrollmentState, nextStepPath, openCorrection, selectionUpdate, validateSelection } from "@/lib/enrollment";
 
 /**
  * Every write below is conditioned on the application still being in the status we checked
@@ -88,13 +88,8 @@ export async function setCourseAction(_: ActionState, fd: FormData): Promise<Act
   revalidatePath("/enroll");
   const after = { ...application, courseId: course._id };
   // Private: pay for the chosen course before the forms open.
-  redirect(after.category === "PRIVATE" && !paymentSettled(after) ? "/enroll/payment" : firstFormPath(after));
-}
-
-function firstFormPath(app: Application) {
-  const s = enrollmentState(app);
-  const open = s.forms.find((f) => !f.complete || !f.signed);
-  return open ? `/enroll/forms/${open.template.key}` : "/enroll/documents";
+  // Private: pay for the chosen course before the forms open (nextStepPath sends them to payment).
+  redirect(nextStepPath(after, after.status === "CORRECTIONS_REQUESTED" ? SECTION_COURSE : undefined));
 }
 
 const signatureSchema = z
@@ -158,9 +153,8 @@ export async function saveFormAction(templateKey: string, _: ActionState, fd: Fo
   if (set[`signatures.${template.key}`]) await audit(user._id, "application.sign", "application", application._id, { template: template.key });
   revalidatePath("/enroll");
 
-  const list = templatesFor(application.category);
-  const next = list[list.findIndex((t) => t.key === template.key) + 1];
-  redirect(next ? `/enroll/forms/${next.key}` : "/enroll/documents");
+  // Next step in order; while correcting, the next flagged section (locked ones are skipped), then Review.
+  redirect(nextStepPath(application, template.key));
 }
 
 export async function uploadDocumentAction(_: ActionState, fd: FormData): Promise<ActionState> {

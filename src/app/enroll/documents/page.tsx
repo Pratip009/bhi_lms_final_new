@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { requireStudentStage } from "@/lib/auth";
-import { canEdit, editableSections, enrollmentState } from "@/lib/enrollment";
+import { canEdit, editableSections, enrollmentState, nextStepPath, openCorrection } from "@/lib/enrollment";
 import { SECTION_DOCUMENTS } from "@/lib/forms/templates";
 import { ALLOWED_BY_DOC } from "@/lib/file-validation";
 import { StudentShell } from "@/components/student-shell";
@@ -20,10 +20,12 @@ export default async function DocumentsPage() {
   const editable = editableSections(application);
   const locked = !canEdit(editable, SECTION_DOCUMENTS);
   const state = enrollmentState(application);
+  const correction = application.status === "CORRECTIONS_REQUESTED" ? openCorrection(application) : null;
 
   return (
     <StudentShell name={user.name} step={1} nav={<EnrollNav app={application} active="documents" />}>
       <PageHeader title="Documents and resume" description="Files must be 10 MB or smaller. Your resume and photo ID are required." />
+      {correction && !locked && <div className="mb-5"><Alert tone="warning"><p className="font-semibold">Please update your documents. Note from the admissions team:</p><p className="mt-1 whitespace-pre-wrap">{correction.note}</p></Alert></div>}
       {locked && <div className="mb-5"><Alert tone="info">Documents are locked while your application is being corrected.</Alert></div>}
       <div className="space-y-4">
         {state.requirements.map(({ req, files }) => (
@@ -49,7 +51,7 @@ export default async function DocumentsPage() {
           </Card>
         ))}
       </div>
-      <div className="mt-6"><LinkButton href="/enroll/review">Review and submit</LinkButton></div>
+      <div className="mt-6"><LinkButton href={nextStepPath(application, "documents")}>Continue</LinkButton></div>
     </StudentShell>
   );
 }

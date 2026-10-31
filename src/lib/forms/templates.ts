@@ -543,5 +543,6 @@ export function sectionLabel(key: string): string {
   if (key === SECTION_DOCUMENTS) return "Documents and resume";
   if (key === SECTION_CATEGORY) return "Enrollment type and program";
   if (key === SECTION_COURSE) return "Course selection";
+  if (key === "review") return "Review and submit";
   return TEMPLATES.find((t) => t.key === key)?.title ?? key;
 }

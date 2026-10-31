@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { cols } from "@/db";
 import { requireStudentStage } from "@/lib/auth";
-import { canEdit, editableSections, enrollmentState, openCorrection } from "@/lib/enrollment";
+import { canEdit, editableSections, enrollmentState, nextStepPath, openCorrection, stepPath } from "@/lib/enrollment";
 import { describeEnrollment, SECTION_CATEGORY, sectionLabel } from "@/lib/forms/templates";
 import { StudentShell } from "@/components/student-shell";
 import { Alert, Card, LinkButton, PageHeader } from "@/components/ui";
@@ -17,12 +17,8 @@ export default async function EnrollPage() {
   const editable = editableSections(application);
   const correction = application.status === "CORRECTIONS_REQUESTED" ? openCorrection(application) : null;
   const state = application.category ? enrollmentState(application) : null;
-  const firstOpen = state?.forms.find((f) => !f.complete || !f.signed);
   const course = application.courseId ? await (await cols()).courses.findOne({ _id: application.courseId }, { projection: { name: 1 } }) : null;
-  const next = !state ? null
-    : !application.courseId ? "/enroll/course"
-    : firstOpen ? `/enroll/forms/${firstOpen.template.key}`
-    : state.ready ? "/enroll/review" : "/enroll/documents";
+  const next = state ? nextStepPath(application) : null;
 
   return (
     <StudentShell name={user.name} step={1} nav={<EnrollNav app={application} active="overview" />}>
@@ -31,10 +27,14 @@ export default async function EnrollPage() {
         <div className="mb-6">
           <Alert tone="warning">
             <p className="font-semibold">The admissions team asked you to update your application.</p>
-            <p className="mt-1">Sections to update: {correction.sections.map(sectionLabel).join(", ")}</p>
             <p className="mt-2 whitespace-pre-wrap">{correction.note}</p>
-            <p className="mt-2">Other sections are locked. When you're done, go to Review and submit to send it back.</p>
+            <p className="mt-3 font-semibold">What to update:</p>
+            <ul className="mt-1 list-disc pl-5">
+              {correction.sections.map((k) => <li key={k}><Link href={stepPath(k)} className="underline">{sectionLabel(k)}</Link></li>)}
+            </ul>
+            <p className="mt-3">Everything else is kept as you sent it. When you&apos;re done, review and submit again.</p>
           </Alert>
+          <div className="mt-4"><LinkButton href={next ?? "/enroll/review"}>Start with: {sectionLabel(correction.sections[0] ?? "review")}</LinkButton></div>
         </div>
       )}
       <Card title="Enrollment type and program">
@@ -48,7 +48,7 @@ export default async function EnrollPage() {
       </Card>
       {state && (
         <div className="mt-6 flex flex-wrap items-center gap-4">
-          {next && <LinkButton href={next}>{state.forms.some((f) => f.complete) ? "Continue enrollment" : "Next"}</LinkButton>}
+          {next && !correction && <LinkButton href={next}>{state.forms.some((f) => f.complete) ? "Continue enrollment" : "Next"}</LinkButton>}
           <p className="text-sm text-slate-600">
             {course && <>Course: <strong>{course.name}</strong>. </>}
             {state.ready ? "Everything is complete. " : `${state.missing.length} item${state.missing.length === 1 ? "" : "s"} left. `}

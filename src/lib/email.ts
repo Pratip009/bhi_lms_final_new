@@ -48,17 +48,18 @@ export async function sendOtpEmail(to: string, name: string, code: string, purpo
   await send(to, `${title}: ${code}`, html, `${intro}\n\nCode: ${code}\nExpires in ${OTP_TTL_MINUTES} minutes.`);
 }
 
-export async function sendCorrectionsEmail(to: string, name: string, sections: string[], note: string) {
+/** The admin's own message, sent to the student's registered address, with a link to the parts to update. */
+export async function sendCorrectionsEmail(to: string, name: string, sections: string[], note: string, subject = "Action needed: update your enrollment application") {
   const list = sections.map((s) => `<li>${escapeHtml(s)}</li>`).join("");
   const html = layout(
     "Your application needs a few changes",
-    `<p>Hi ${escapeHtml(name)},</p><p>Our admissions team reviewed your enrollment application and needs you to update:</p>
-     <ul>${list}</ul><p><strong>Note from the team:</strong></p>
-     <p style="white-space:pre-wrap;background:#F4F7F6;padding:12px;border-radius:6px">${escapeHtml(note)}</p>
+    `<p style="white-space:pre-wrap">${escapeHtml(note)}</p>
+     <p><strong>Parts to update:</strong></p><ul>${list}</ul>
+     <p>Everything else in your application is kept. Sign in, make the changes and submit again.</p>
      <p><a href="${link("/enroll")}" style="display:inline-block;background:#1F4E46;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none">Update my application</a></p>`,
   );
-  await send(to, "Action needed: update your enrollment application", html,
-    `Please update: ${sections.join(", ")}\n\nNote: ${note}\n\n${link("/enroll")}`);
+  void name;
+  await send(to, subject, html, `${note}\n\nParts to update: ${sections.join(", ")}\n\nSign in to update your application: ${link("/enroll")}`);
 }
 
 /** Runs an email send and reports whether it worked, so callers never claim an email went out when it didn't. */

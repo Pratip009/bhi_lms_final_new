@@ -1,9 +1,9 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import type { ActionState } from "@/lib/action";
 import { ActionForm, Checkbox, Field, Submit, useFormCtx } from "./forms";
-import type { ButtonVariant } from "./ui";
+import { buttonClass, type ButtonVariant } from "./ui";
 
 type Act = (prev: ActionState, fd: FormData) => Promise<ActionState>;
 
@@ -30,7 +30,7 @@ function SectionPicker({ sections }: { sections: { key: string; label: string }[
   const { state } = useFormCtx();
   return (
     <fieldset>
-      <legend className="mb-2 text-sm font-medium">Sections the student may change</legend>
+      <legend className="mb-2 text-sm font-medium">Which parts should the student change?</legend>
       <div className="grid gap-2 sm:grid-cols-2">
         {sections.map((s) => (
           <label key={s.key} className="flex items-center gap-2 rounded-md border border-line px-3 py-2 text-sm">
@@ -43,12 +43,28 @@ function SectionPicker({ sections }: { sections: { key: string; label: string }[
   );
 }
 
-export function CorrectionsForm({ action, sections }: { action: Act; sections: { key: string; label: string }[] }) {
+/**
+ * "Request corrections": a button that opens an email to the student's registered address. The admin
+ * ticks what the student must change (those parts reopen; everything else stays saved), writes the
+ * message and clicks Send. Nothing is sent until Send.
+ */
+export function CorrectionsForm({ action, sections, to, studentName }: { action: Act; sections: { key: string; label: string }[]; to: string; studentName: string }) {
+  const [open, setOpen] = useState(false);
+  if (!open) return <button type="button" onClick={() => setOpen(true)} className={buttonClass("secondary", "w-full")}>Request corrections</button>;
   return (
     <ActionForm action={action} className="space-y-4">
+      <div className="rounded-md border border-line bg-mist p-3 text-sm">
+        <p><span className="text-slate-500">To:</span> <strong>{studentName}</strong> &lt;{to}&gt;</p>
+      </div>
+      <Field name="subject" label="Subject" required defaultValue="Action needed: update your enrollment application" maxLength={150} />
+      <Field name="note" label="Message" type="textarea" rows={6} required
+        defaultValue={`Hi ${studentName.split(" ")[0] || studentName},\n\nPlease update the following in your application:\n\n`} />
       <SectionPicker sections={sections} />
-      <Field name="note" label="What needs to change (emailed to the student)" type="textarea" rows={4} required />
-      <Submit variant="secondary">Send correction request</Submit>
+      <p className="text-xs text-slate-500">The student signs in, sees your message and goes straight to the parts you ticked. Everything else stays as they sent it.</p>
+      <div className="flex flex-wrap gap-2">
+        <Submit>Send</Submit>
+        <button type="button" onClick={() => setOpen(false)} className={buttonClass("ghost")}>Cancel</button>
+      </div>
     </ActionForm>
   );
 }

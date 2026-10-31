@@ -77,10 +77,12 @@ export async function requestCorrectionsAction(applicationId: string, _: ActionS
   const allowed = ALL_SECTIONS(row.app);
   const sections = fd.getAll("sections").map(String).filter((s) => allowed.includes(s));
   const note = z.string().trim().min(5, "Explain what needs to change (at least 5 characters)").max(3000).safeParse(fd.get("note"));
+  const subject = z.string().trim().min(3, "Enter a subject").max(150).safeParse(fd.get("subject") ?? "Action needed: update your enrollment application");
   const errors: Record<string, string> = {};
-  if (!sections.length) errors.sections = "Pick at least one section to unlock";
+  if (!sections.length) errors.sections = "Tick at least one part for the student to change";
+  if (!subject.success) errors.subject = subject.error.issues[0].message;
   if (!note.success) errors.note = note.error.issues[0].message;
-  if (Object.keys(errors).length || !note.success) return { fieldErrors: errors };
+  if (Object.keys(errors).length || !note.success || !subject.success) return { fieldErrors: errors };
 
   const { applications } = await cols();
   const res = await applications.updateOne(
@@ -92,11 +94,11 @@ export async function requestCorrectionsAction(applicationId: string, _: ActionS
   );
   if (!res.modifiedCount) return { error: "Corrections can only be requested on pending applications." };
   await audit(admin._id, "application.request_corrections", "application", applicationId, { sections, note: note.data });
-  const emailed = await trySend(() => sendCorrectionsEmail(row.student.email, row.student.name, sections.map(sectionLabel), note.data));
+  const emailed = await trySend(() => sendCorrectionsEmail(row.student.email, row.student.name, sections.map(sectionLabel), note.data, subject.data));
   revalidatePath("/admin", "layout");
   return {
     ok: true,
-    message: emailed ? "Correction request sent to the student." : "Corrections requested (the student sees them when signing in), but the email could not be sent.",
+    message: emailed ? `Email sent to ${row.student.email}. The application is open for the student to correct.` : "The application is open for the student to correct (they see your message when signing in), but the email could not be sent.",
   };
 }
 
