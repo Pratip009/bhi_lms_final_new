@@ -29,11 +29,12 @@ export async function requireInstructor(): Promise<User> {
 
 export async function getStudentContext(userId: string) {
   const { applications, enrollments } = await cols();
-  const [application, active] = await Promise.all([
+  const [application, active, earlier] = await Promise.all([
     applications.findOne({ studentId: userId }),
     enrollments.findOne({ studentId: userId, status: "ACTIVE" }, { projection: { _id: 1 } }),
+    enrollments.findOne({ studentId: userId, status: { $ne: "ACTIVE" } }, { projection: { _id: 1 } }),
   ]);
-  return { application, hasActiveEnrollment: !!active };
+  return { application, hasActiveEnrollment: !!active, hasEarlierEnrollment: !!earlier };
 }
 
 /** Allows the page only when the student's current stage matches; otherwise sends them where they belong. */
@@ -42,9 +43,9 @@ export async function requireStudentStage(stage: StudentStage): Promise<{ user: 
   if (user.role !== "STUDENT") redirect(await homePath(user));
   const ctx = await getStudentContext(user._id);
   if (!ctx.application) throw new Error("Student has no application record");
-  const actual = studentStage(ctx.application.status, ctx.hasActiveEnrollment);
+  const actual = studentStage(ctx.application.status, ctx.hasActiveEnrollment, ctx.hasEarlierEnrollment);
   if (actual !== stage) {
-    redirect(homeFor({ role: "STUDENT", emailVerified: true, applicationStatus: ctx.application.status, hasActiveEnrollment: ctx.hasActiveEnrollment }));
+    redirect(homeFor({ role: "STUDENT", emailVerified: true, applicationStatus: ctx.application.status, hasActiveEnrollment: ctx.hasActiveEnrollment, hasEarlierEnrollment: ctx.hasEarlierEnrollment }));
   }
   return { user, application: ctx.application };
 }
@@ -54,5 +55,5 @@ export async function homePath(user: User): Promise<string> {
     return homeFor({ role: user.role, emailVerified: !!user.emailVerifiedAt, instructorStatus: user.instructorStatus });
   }
   const ctx = await getStudentContext(user._id);
-  return homeFor({ role: "STUDENT", emailVerified: !!user.emailVerifiedAt, applicationStatus: ctx.application?.status, hasActiveEnrollment: ctx.hasActiveEnrollment });
+  return homeFor({ role: "STUDENT", emailVerified: !!user.emailVerifiedAt, applicationStatus: ctx.application?.status, hasActiveEnrollment: ctx.hasActiveEnrollment, hasEarlierEnrollment: ctx.hasEarlierEnrollment });
 }

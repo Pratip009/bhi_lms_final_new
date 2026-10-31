@@ -39,6 +39,11 @@ export default async function StudentDashboard() {
         </dl>
         <p className="mt-3 text-xs text-slate-500">Your Google Classroom link is on each class below once your instructor shares it.</p>
       </Card>
+      {rows.length === 0 && (
+        <Card title="No current class" className="mb-6">
+          <p className="text-sm">You&apos;re not in a class right now. Your earlier classes and their attendance are listed below. Contact the office if you expected to be in a class.</p>
+        </Card>
+      )}
       <div className="grid gap-4 md:grid-cols-2">
         {rows.map(({ klass, course, enrollment }) => {
           const runsToday = !klass.archived && today >= klass.startDate && today <= klass.endDate;
@@ -68,7 +73,7 @@ export default async function StudentDashboard() {
         })}
       </div>
       {past.length > 0 && (
-        <Card title="Earlier sections" className="mt-6">
+        <Card title="Earlier classes" className="mt-6">
           <ul className="space-y-2 text-sm">
             {past.map((e) => {
               const k = pastClasses.find((x) => x._id === e.classId);

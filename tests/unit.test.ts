@@ -156,6 +156,7 @@ test("student routing follows status", () => {
   assert.equal(studentStage("SUBMITTED", false), "STATUS");
   assert.equal(studentStage("APPROVED", false), "STATUS");
   assert.equal(studentStage("APPROVED", true), "DASHBOARD");
+  assert.equal(studentStage("APPROVED", false, true), "DASHBOARD", "earlier records stay reachable after classes end");
   assert.equal(studentStage("REJECTED", true), "STATUS");
   assert.equal(homeFor({ role: "STUDENT", emailVerified: false }), "/verify");
   assert.equal(homeFor({ role: "INSTRUCTOR", emailVerified: true, instructorStatus: "PENDING" }), "/instructor/pending");
