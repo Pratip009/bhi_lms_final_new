@@ -22,7 +22,7 @@ export default async function PaymentReturnPage({ searchParams }: { searchParams
   if (!stripeEnabled() || !/^cs_(test|live)_[A-Za-z0-9]+$/.test(sessionId)) redirect(await homePath(user));
 
   const app = await (await cols()).applications.findOne({ studentId: user._id }, { projection: { _id: 1 } });
-  let message = "We couldn't confirm your payment yet. If you paid, it will show up within a few minutes and we'll email you.";
+  let message = "We couldn't confirm your payment yet. If you paid, it will show up within a few minutes and we'll email you; your forms open then.";
   let tone: "info" | "success" | "error" = "info";
   let goTo: string | null = null;
   try {
@@ -31,7 +31,7 @@ export default async function PaymentReturnPage({ searchParams }: { searchParams
       goTo = await homePath(user);
     } else {
       const result = await settleCheckoutSession(session, "return");
-      if (result.state === "PAID" && result.approved) goTo = "/dashboard";
+      if (result.state === "PAID") goTo = await homePath(user); // the enrollment forms are now open
       message = result.message;
       tone = result.state === "PAID" ? "success" : result.state === "NOT_PAID" ? "error" : "info";
     }
@@ -43,7 +43,7 @@ export default async function PaymentReturnPage({ searchParams }: { searchParams
     <StudentShell name={user.name} step={2}>
       <PageHeader title="Your payment" />
       <Alert tone={tone}><p className="font-semibold">{message}</p></Alert>
-      <p className="mt-5"><Link href="/application" className="font-semibold text-pine-700 underline">Back to my application</Link></p>
+      <p className="mt-5"><Link href="/" className="font-semibold text-pine-700 underline">Back to my enrollment</Link></p>
     </StudentShell>
   );
 }

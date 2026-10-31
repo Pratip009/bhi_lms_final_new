@@ -2,13 +2,13 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireStudentStage } from "@/lib/auth";
-import { env } from "@/lib/env";
+import { formatUsd } from "@/lib/payment";
 import { enrollmentState } from "@/lib/enrollment";
 import { describeEnrollment, displayValue, inputFields } from "@/lib/forms/templates";
 import { cols } from "@/db";
 import { StatusBadge } from "@/components/ui";
 import { StudentShell } from "@/components/student-shell";
-import { Alert, Card, PageHeader } from "@/components/ui";
+import { Alert, Card, PageHeader, fmtDate } from "@/components/ui";
 import { EnrollNav } from "../enroll-nav";
 import { SubmitForm } from "./submit-form";
 
@@ -20,7 +20,6 @@ export default async function ReviewPage() {
   if (!application.category) redirect("/enroll");
   const state = enrollmentState(application);
   const isPrivate = application.category === "PRIVATE";
-  const { PRIVATE_TUITION_USD } = env();
   const course = application.courseId ? await (await cols()).courses.findOne({ _id: application.courseId }, { projection: { name: 1 } }) : null;
 
   return (
@@ -46,11 +45,12 @@ export default async function ReviewPage() {
         ))}
 
         {isPrivate && (
-          <Card title="Tuition and payment">
+          <Card title="Tuition and fees">
             <p className="text-sm">
-              Program tuition: <strong>{PRIVATE_TUITION_USD > 0 ? `$${PRIVATE_TUITION_USD.toLocaleString("en-US")}` : "as stated in your tuition agreement"}</strong>.
+              {application.paymentStatus === "PAID" ? <>Paid{application.paymentRequest?.amountPaidCents ? <> <strong>{formatUsd(application.paymentRequest.amountPaidCents)}</strong></> : null}{application.paymentVerifiedAt ? ` on ${fmtDate(application.paymentVerifiedAt)}` : ""}. Thank you.</>
+                : application.paymentStatus === "WAIVED" ? "Waived by the BHI office."
+                : <span className="font-semibold text-brick-600">Not paid yet. <Link href="/enroll/payment" className="underline">Pay now</Link></span>}
             </p>
-            <p className="mt-2 text-sm">You don't pay now. After the office reviews your application, you'll receive a payment request by email with the amount, and you can pay online.</p>
           </Card>
         )}
 

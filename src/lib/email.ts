@@ -200,10 +200,10 @@ export async function sendPaymentReceivedEmail(to: string, name: string, amount:
   const html = layout(
     "Payment received",
     `<p>Hi ${escapeHtml(name)},</p><p>We received your tuition payment of <strong>${escapeHtml(amount)}</strong> for <strong>${escapeHtml(courseName)}</strong>. Thank you.</p>
-     <p>Stripe also emails you a receipt.</p>
-     <p><a href="${link("/dashboard")}" style="display:inline-block;background:#1F4E46;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none">Open my dashboard</a></p>`,
+     <p>Your enrollment forms are now open. Stripe also emails you a receipt.</p>
+     <p><a href="${link("/enroll")}" style="display:inline-block;background:#1F4E46;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none">Continue my enrollment</a></p>`,
   );
-  await send(to, `Payment received: ${amount}`, html, `We received your tuition payment of ${amount} for ${courseName}. Your dashboard: ${link("/dashboard")}`);
+  await send(to, `Payment received: ${amount}`, html, `We received your tuition payment of ${amount} for ${courseName}. Your enrollment forms are now open: ${link("/enroll")}`);
 }
 
 export async function notifyAdminsPayment(adminEmails: string[], studentName: string, applicationId: string, headline: string, detail: string) {

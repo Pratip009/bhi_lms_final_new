@@ -2,7 +2,6 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { cols } from "@/db";
 import { requireAdmin } from "@/lib/auth";
-import { env } from "@/lib/env";
 import { ALL_SECTIONS, enrollmentState } from "@/lib/enrollment";
 import { usersById } from "@/lib/queries";
 import { describeEnrollment, displayValue, inputFields, sectionLabel, templatesFor, TEMPLATES, GROUP_LABELS } from "@/lib/forms/templates";
@@ -11,12 +10,12 @@ import { approvalBlockedByPayment } from "@/lib/payment";
 import { CategoryForm } from "@/app/enroll/category-form";
 import { AdminCourseForm } from "@/components/admin-app-edit";
 import { Alert, Card, PageHeader, StatusBadge, fmtDate } from "@/components/ui";
-import { ActionButton, CorrectionsForm, PaymentRequestForm, RejectForm } from "@/components/action-widgets";
+import { ActionButton, CorrectionsForm, RejectForm } from "@/components/action-widgets";
 import { formatUsd } from "@/lib/payment";
 import { stripeEnabled } from "@/lib/tuition";
 import {
   adminSetCourseAction, adminSetSelectionAction, approveApplicationAction, cancelPaymentRequestAction, rejectApplicationAction, reopenApplicationAction, requestCorrectionsAction,
-  requestPaymentAction, setPaymentStatusAction,
+  setPaymentStatusAction,
 } from "../../actions";
 
 export default async function ApplicationDetail({ params }: { params: Promise<{ id: string }> }) {
@@ -142,9 +141,7 @@ export default async function ApplicationDetail({ params }: { params: Promise<{ 
             <>
               <Card title="Approve">
                 <p className="mb-3 text-sm text-slate-600">Approval enrolls the student in {course ? <strong>{course.name}</strong> : "their chosen course"} and opens their dashboard.</p>
-                {paymentBlocks && <div className="mb-3"><Alert tone="warning">
-                  {app.paymentStatus === "REQUESTED" ? "Waiting for the student's payment. They're approved automatically when it goes through." : "Tuition isn't settled yet. Send a payment request (Tuition payment, below)."}
-                </Alert></div>}
+                {paymentBlocks && <div className="mb-3"><Alert tone="warning">Tuition isn&apos;t paid yet, so this application can&apos;t be approved. See Tuition payment, below.</Alert></div>}
                 <ActionButton action={approveApplicationAction.bind(null, app._id)} label="Approve and enroll"
                   confirm={state.ready ? undefined : "This application looks incomplete. Approve anyway?"} />
               </Card>
@@ -155,7 +152,10 @@ export default async function ApplicationDetail({ params }: { params: Promise<{ 
             </>
           )}
           {(reviewable || app.status === "CORRECTIONS_REQUESTED") && (
-            <Card title="Reject"><RejectForm action={rejectApplicationAction.bind(null, app._id)} /></Card>
+            <Card title="Reject">
+              {app.paymentRequest?.status === "PAID" && <div className="mb-3"><Alert tone="info">This student paid online. If a refund is due under the Tuition Refund Schedule, issue it in Stripe after rejecting.</Alert></div>}
+              <RejectForm action={rejectApplicationAction.bind(null, app._id)} />
+            </Card>
           )}
           {app.status === "APPROVED" && (
             <Card title="Enrollment">
@@ -172,44 +172,27 @@ export default async function ApplicationDetail({ params }: { params: Promise<{ 
           {app.category === "PRIVATE" && (
             <Card title="Tuition payment">
               <p className="mb-3 text-sm">Status: <StatusBadge status={app.paymentStatus} /></p>
-              {app.paymentRequest && (
-                <div className="mb-4 rounded-md bg-mist p-3 text-sm">
-                  <p><strong>{formatUsd(app.paymentRequest.amountCents)}</strong> requested {fmtDate(app.paymentRequest.requestedAt)}</p>
-                  <p className="text-slate-600">
-                    {app.paymentRequest.status === "OPEN" && (app.paymentRequest.checkoutSessionId ? "The student opened the payment page; not paid yet." : "Waiting for the student.")}
-                    {app.paymentRequest.status === "PAID" && <>Paid online {fmtDate(app.paymentRequest.paidAt)}{app.paymentRequest.stripePaymentIntentId ? ` (Stripe ${app.paymentRequest.stripePaymentIntentId})` : ""}</>}
-                    {app.paymentRequest.status === "CANCELLED" && `Cancelled${app.paymentRequest.cancelReason ? `: ${app.paymentRequest.cancelReason}` : ""}`}
-                  </p>
-                  {app.paymentRequest.note && <p className="mt-1 whitespace-pre-wrap">{app.paymentRequest.note}</p>}
-                </div>
+              {app.paymentRequest?.status === "PAID" && (
+                <p className="mb-3 text-sm">
+                  <strong>{formatUsd(app.paymentRequest.amountPaidCents ?? app.paymentRequest.amountCents)}</strong> paid online {fmtDate(app.paymentRequest.paidAt)}
+                  {app.paymentRequest.stripePaymentIntentId && <span className="block text-xs text-slate-500">Stripe reference {app.paymentRequest.stripePaymentIntentId}</span>}
+                </p>
               )}
-              {app.paymentReference && app.paymentRequest?.status !== "PAID" && <p className="mb-3 text-sm">Reference: <strong>{app.paymentReference}</strong></p>}
-              {app.paymentVerifiedAt && <p className="mb-3 text-xs text-slate-500">Settled {fmtDate(app.paymentVerifiedAt)}</p>}
-
-              {reviewable && app.paymentStatus !== "PAID" && app.paymentStatus !== "WAIVED" && (
-                stripeEnabled() ? (
-                  <div className="mb-4">
-                    <PaymentRequestForm action={requestPaymentAction.bind(null, app._id)} replacing={app.paymentRequest?.status === "OPEN"}
-                      defaultAmount={app.paymentRequest?.status === "OPEN" ? (app.paymentRequest.amountCents / 100).toFixed(2) : env().PRIVATE_TUITION_USD ? String(env().PRIVATE_TUITION_USD) : undefined} />
-                    {app.paymentRequest?.status === "OPEN" && (
-                      <div className="mt-2"><ActionButton action={cancelPaymentRequestAction.bind(null, app._id)} label="Cancel request" variant="secondary"
-                        confirm="Cancel this payment request? The student's payment page stops working." /></div>
-                    )}
-                  </div>
-                ) : <div className="mb-4"><Alert tone="info">Online payment isn't set up (Stripe keys). You can still record an offline payment below.</Alert></div>
+              {app.paymentStatus !== "PAID" && app.paymentStatus !== "WAIVED" && (
+                <p className="mb-3 text-sm text-slate-600">The student pays online after choosing a course; their forms open once it goes through.{!stripeEnabled() && " Online payment isn't set up yet (Stripe keys), so record payments made in person below."}</p>
               )}
-              {!reviewable && app.paymentStatus !== "PAID" && app.paymentStatus !== "WAIVED" && (
-                <p className="mb-4 text-xs text-slate-500">A payment request can be sent while the application is waiting for review.</p>
+              {app.paymentRequest?.status === "OPEN" && reviewable && (
+                <div className="mb-3"><ActionButton action={cancelPaymentRequestAction.bind(null, app._id)} label="Cancel the open payment" variant="secondary"
+                  confirm="Cancel this payment? The student's payment page stops working." /></div>
               )}
-
               {app.paymentRequest?.status !== "PAID" && (
                 <details className="text-sm">
-                  <summary className="cursor-pointer font-medium">Record an offline payment or waive</summary>
+                  <summary className="cursor-pointer font-medium">Paid in person, or waive</summary>
                   <div className="mt-3 flex flex-wrap gap-2">
                     {(["PAID", "WAIVED", "PENDING"] as const).filter((s) => s !== app.paymentStatus).map((s) => (
                       <ActionButton key={s} action={setPaymentStatusAction.bind(null, app._id)} hidden={{ paymentStatus: s }} variant="secondary"
-                        label={s === "PAID" ? "Mark paid offline" : s === "WAIVED" ? "Waive tuition" : "Back to unpaid"}
-                        confirm={s === "PENDING" ? "Set tuition back to unpaid?" : `Set tuition to ${s.toLowerCase()}? Any open online request is cancelled.`} />
+                        label={s === "PAID" ? "Paid in person" : s === "WAIVED" ? "Waive tuition" : "Back to unpaid"}
+                        confirm={s === "PENDING" ? "Set tuition back to unpaid?" : s === "PAID" ? "Record that the student paid in person?" : "Waive this student's tuition?"} />
                     ))}
                   </div>
                 </details>

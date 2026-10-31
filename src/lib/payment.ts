@@ -2,17 +2,16 @@
 import type { Application } from "@/db/types";
 
 /**
- * When a Private student's payment is required.
- *
- * The flow is: the student fills in and submits the application without paying; an admin reviews it
- * and sends a payment request with the amount; the student pays online (Stripe); the payment approves
- * them. So forms and submission are never blocked by payment, and approval always needs a settled
- * payment. The other gates are kept only so older settings and tests still make sense.
+ * When a Private student's payment is required. BHI's workflow is: register → choose Private and a
+ * course → pay online (Stripe) → the Common and Private forms open → submit → admin decision. So the
+ * gate is "before forms": forms, uploads and submission stay closed until the payment is confirmed
+ * (or the office records it as paid in person, or waives it). The other values are kept only so older
+ * settings and tests still read sensibly.
  */
 export type PaymentGate = "BEFORE_FORMS" | "BEFORE_SUBMIT" | "BEFORE_APPROVAL";
 
 export function paymentGate(): PaymentGate {
-  return "BEFORE_APPROVAL";
+  return "BEFORE_FORMS";
 }
 
 type PaymentFields = Pick<Application, "category" | "paymentStatus">;
@@ -20,7 +19,7 @@ type PaymentFields = Pick<Application, "category" | "paymentStatus">;
 /** Paid (online or verified by an admin) or waived. Never set from the student's side. */
 export const paymentSettled = (a: PaymentFields) => a.category !== "PRIVATE" || a.paymentStatus === "PAID" || a.paymentStatus === "WAIVED";
 
-/** Private student must pay before opening the forms (only with the legacy BEFORE_FORMS gate). */
+/** Private student must pay before opening the forms. */
 export const formsBlockedByPayment = (a: PaymentFields, gate: PaymentGate = paymentGate()) =>
   a.category === "PRIVATE" && gate === "BEFORE_FORMS" && !paymentSettled(a);
 

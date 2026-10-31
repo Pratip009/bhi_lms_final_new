@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Application } from "@/db";
 import { enrollmentState } from "@/lib/enrollment";
+import { paymentSettled } from "@/lib/payment";
 import { GROUP_LABELS, type TemplateGroup } from "@/lib/forms/templates";
 import { cx } from "@/components/ui";
 
@@ -14,6 +15,7 @@ export function EnrollNav({ app, active }: { app: Application; active: string })
     { key: "overview", href: "/enroll", label: "Enrollment type", done: true },
     { key: "course", href: "/enroll/course", label: "Course", done: !!app.courseId },
   ];
+  if (app.category === "PRIVATE") items.push({ key: "payment", href: "/enroll/payment", label: "Tuition payment", done: paymentSettled(app) });
   let lastGroup: TemplateGroup | null = null;
   for (const f of s.forms) {
     const g = f.template.group;
@@ -34,7 +36,7 @@ export function EnrollNav({ app, active }: { app: Application; active: string })
             className={cx("flex items-center justify-between gap-2 rounded px-3 py-2", active === i.key ? "bg-pine-50 font-semibold text-pine-800" : i.locked ? "text-slate-400" : "text-slate-700 hover:bg-mist")}>
             <span>{i.label}</span>
             {i.done && i.key !== "overview" && <span className="text-pine-600" aria-label="complete">✓</span>}
-            {i.locked && !i.done && <span aria-label="locked until payment is verified" title="Opens after payment is verified">🔒</span>}
+            {i.locked && !i.done && <span aria-label="opens after payment" title="Opens after your tuition is paid">🔒</span>}
           </Link>
         </div>
       ))}

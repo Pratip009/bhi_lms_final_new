@@ -12,14 +12,19 @@ export type NonPrivateProgram = "EQISS" | "DFS";
 export type County = "HUDSON" | "BERGEN" | "SOMERSET";
 export type ApplicationStatus = "DRAFT" | "SUBMITTED" | "CORRECTIONS_REQUESTED" | "RESUBMITTED" | "APPROVED" | "REJECTED";
 /**
- * Private tuition. PENDING: not paid yet. REQUESTED: an admin reviewed the application and sent the
- * student a payment request (paid online with Stripe). PAID / WAIVED: settled (online, offline or waived).
+ * Private tuition. PENDING: not paid yet. REQUESTED: a payment is open (the student started paying online).
+ * PAID / WAIVED: settled (online with Stripe, recorded in person by the office, or waived).
  */
 export type PaymentStatus = "NOT_REQUIRED" | "PENDING" | "REQUESTED" | "PAID" | "WAIVED";
 
-/** One tuition payment request an admin sends a Private student after reviewing the application. */
+/**
+ * One tuition payment for a Private student: created when the student presses "Pay" for their chosen
+ * course (before the forms open). Older records were created by an admin after review.
+ */
 export type PaymentRequest = {
   id: string;
+  /** The course the payment is for (the amount is that course's tuition and fees). */
+  courseId?: string | null;
   amountCents: number;
   currency: "usd";
   /** Shown to the student with the request (e.g. what the amount covers). */

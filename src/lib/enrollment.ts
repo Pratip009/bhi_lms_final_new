@@ -45,7 +45,7 @@ export function enrollmentState(app: Application, gate: PaymentGate = paymentGat
   if (!app.category) missing.push("Choose Private or Non-Private (and your program)");
   if (app.category === "EQISS" && !app.county) missing.push("Choose your county (Hudson, Bergen or Somerset)");
   if (!app.courseId) missing.push("Choose your course");
-  if (submitBlockedByPayment(app, gate)) missing.push("Tuition payment must be verified by the BHI office");
+  if (submitBlockedByPayment(app, gate)) missing.push("Pay your tuition and fees");
   for (const f of forms) {
     if (!f.complete) missing.push(`Complete "${f.template.title}"`);
     else if (!f.signed) missing.push(`Sign "${f.template.title}"`);

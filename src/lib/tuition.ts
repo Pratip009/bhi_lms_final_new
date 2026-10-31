@@ -1,9 +1,8 @@
 import "server-only";
 import Stripe from "stripe";
-import { cols, type Application, type PaymentRequest } from "@/db";
+import { cols, newId, type Application, type PaymentRequest } from "@/db";
 import { env } from "@/lib/env";
 import { audit } from "@/lib/audit";
-import { approveApplication, REVIEWABLE } from "@/lib/approval";
 import { formatUsd } from "@/lib/payment";
 import { notifyAdminsPayment, sendPaymentReceivedEmail, trySend } from "@/lib/email";
 
@@ -11,10 +10,11 @@ import { notifyAdminsPayment, sendPaymentReceivedEmail, trySend } from "@/lib/em
  * Online tuition payment for Private students, with Stripe Checkout (Stripe's hosted payment page:
  * card details never reach this server).
  *
- * Flow: an admin sends a payment request (amount) → the student presses "Pay" → a Checkout session
- * is created for exactly that request → Stripe confirms the payment to /api/stripe/webhook (and the
- * student's return to /application/paid checks it too) → settleCheckoutSession() marks it paid once
- * and approves + enrolls the student.
+ * Flow: a Private student chooses a course → presses "Pay" → a payment for that course's tuition and
+ * fees is opened and a Checkout session created for exactly that amount → Stripe confirms the payment
+ * to /api/stripe/webhook (and the student's return to /application/paid checks it too) →
+ * settleCheckoutSession() marks it paid once → the enrollment forms open. Payment never approves an
+ * application; the office reviews and approves it after the student submits.
  */
 
 let client: Stripe | null = null;
@@ -46,7 +46,7 @@ export async function closeCheckout(sessionId: string | null | undefined): Promi
 }
 
 export type SettleResult =
-  | { state: "PAID"; applicationId: string; approved: boolean; message: string }
+  | { state: "PAID"; applicationId: string; approved: false; message: string }
   | { state: "PROCESSING" | "NOT_PAID" | "IGNORED"; applicationId?: string; message: string };
 
 /**
@@ -77,6 +77,7 @@ export async function settleCheckoutSession(session: Stripe.Checkout.Session, vi
   // Money arrived for a request that isn't the current one (cancelled or replaced after the student
   // opened the payment page). Never lost silently: recorded and the office is told to sort it out.
   if (!current || current.status === "CANCELLED") {
+    // (A student changed course after opening a payment page for the earlier one, or the office cancelled it.)
     const known = await audits(applicationId, "application.payment_unexpected", session.id);
     if (!known) {
       await audit(null, "application.payment_unexpected", "application", applicationId, { sessionId: session.id, paymentIntent, amountCents: paid, requestId, via });
@@ -118,19 +119,9 @@ export async function settleCheckoutSession(session: Stripe.Checkout.Session, vi
     }
   }
 
-  // Approve and enroll (only while the application is waiting for review; safe to repeat).
-  const fresh = await applications.findOne({ _id: applicationId }, { projection: { status: 1, paymentStatus: 1 } });
-  let approved = fresh?.status === "APPROVED";
-  if (fresh && fresh.paymentStatus === "PAID" && REVIEWABLE.includes(fresh.status)) {
-    const r = await approveApplication(applicationId, current.requestedById, "stripe");
-    approved = r.ok;
-    if (!r.ok) {
-      await notifyAdminsPayment(await adminEmails(), studentName, applicationId, "Paid, approval needs you", r.error);
-    }
-  }
   return {
-    state: "PAID", applicationId, approved,
-    message: approved ? "Payment received. You're enrolled." : "Payment received. The office will finish your enrollment and email you.",
+    state: "PAID", applicationId, approved: false,
+    message: "Payment received. Your enrollment forms are now open.",
   };
 }
 
@@ -145,4 +136,54 @@ export async function checkoutTarget(app: Application): Promise<{ request: Payme
   if (!requestOpen(app) || !app.paymentRequest) return null;
   const course = app.courseId ? await (await cols()).courses.findOne({ _id: app.courseId }, { projection: { name: 1 } }) : null;
   return { request: app.paymentRequest, courseName: course?.name ?? "Tuition" };
+}
+
+/** Tuition and fees for a Private student's chosen course, in cents (0 = not set; the office must set it). */
+export async function amountDueCents(app: Pick<Application, "courseId">): Promise<{ cents: number; courseName: string } | null> {
+  if (!app.courseId) return null;
+  const course = await (await cols()).courses.findOne({ _id: app.courseId }, { projection: { name: 1, fees: 1 } });
+  if (!course) return null;
+  const f = course.fees;
+  const cents = f ? f.tuitionCents + f.feesCents + f.booksCents + f.toolsCents + f.otherCents : Math.round(env().PRIVATE_TUITION_USD * 100);
+  return { cents, courseName: course.name };
+}
+
+/**
+ * The open payment for the student's current course, created (or replaced, if the course or amount
+ * changed) as needed. Returns "PAID" if an earlier payment page turns out to have been paid already.
+ */
+export async function openPaymentForCourse(app: Application, studentId: string): Promise<{ request: PaymentRequest; courseName: string } | { error: string } | "PAID"> {
+  if (app.category !== "PRIVATE") return { error: "Only Private enrollment has a tuition payment." };
+  if (app.paymentStatus === "PAID" || app.paymentStatus === "WAIVED") return "PAID";
+  const due = await amountDueCents(app);
+  if (!due) return { error: "Choose your course first." };
+  if (due.cents < 50) return { error: "The tuition for this course hasn't been set yet. Please contact the BHI office." };
+  const current = app.paymentRequest?.status === "OPEN" ? app.paymentRequest : null;
+  if (current && current.amountCents === due.cents && (current.courseId ?? app.courseId) === app.courseId) return { request: current, courseName: due.courseName };
+
+  const { applications } = await cols();
+  if (current) {
+    // The course (or its price) changed: stop the old payment page first, unless it was just paid.
+    if ((await closeCheckout(current.checkoutSessionId)) === "PAID") {
+      await settleCheckoutSession(await stripe().checkout.sessions.retrieve(current.checkoutSessionId!), "return");
+      return "PAID";
+    }
+    await applications.updateOne(
+      { _id: app._id, "paymentRequest.id": current.id, "paymentRequest.status": "OPEN" },
+      { $set: { "paymentRequest.status": "CANCELLED", "paymentRequest.cancelledAt": new Date(), "paymentRequest.cancelReason": "course or amount changed" } },
+    );
+  }
+  const now = new Date();
+  const request: PaymentRequest = {
+    id: newId(), courseId: app.courseId ?? null, amountCents: due.cents, currency: "usd", note: `Tuition and fees: ${due.courseName}`,
+    requestedById: studentId, requestedAt: now, status: "OPEN", checkoutSessionId: null, checkoutUrl: null, checkoutAttempts: 0,
+  };
+  const fresh = await applications.findOne({ _id: app._id }, { projection: { paymentRequest: 1 } });
+  const res = await applications.updateOne(
+    { _id: app._id, category: "PRIVATE", paymentStatus: { $nin: ["PAID", "WAIVED"] }, "paymentRequest.id": fresh?.paymentRequest?.id ?? null },
+    { $set: { paymentRequest: request, paymentStatus: "REQUESTED", updatedAt: now }, ...(fresh?.paymentRequest ? { $push: { paymentRequestHistory: fresh.paymentRequest } } : {}) },
+  );
+  if (!res.modifiedCount) return { error: "Your application changed meanwhile. Reload the page and try again." };
+  await audit(studentId, "application.payment_opened", "application", app._id, { amountCents: due.cents, courseId: app.courseId, requestId: request.id });
+  return { request, courseName: due.courseName };
 }

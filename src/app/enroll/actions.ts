@@ -12,6 +12,7 @@ import { putFile, deleteFile } from "@/lib/storage";
 import { detectFileType, MAX_UPLOAD_BYTES, ALLOWED_BY_DOC, safeFileName } from "@/lib/file-validation";
 import { notifyAdminsNewApplication, sendSubmissionReceivedEmail } from "@/lib/email";
 import { courseServes } from "@/lib/courses";
+import { paymentSettled } from "@/lib/payment";
 import { invalid, type ActionState } from "@/lib/action";
 import { coerceRaw, documentsFor, getTemplate, inputFields, rawFromForm, schemaFor, templatesFor, SECTION_CATEGORY, SECTION_COURSE, SECTION_DOCUMENTS } from "@/lib/forms/templates";
 import { answersHash, canEdit, editableSections, enrollmentState, openCorrection, selectionUpdate, validateSelection } from "@/lib/enrollment";
@@ -26,6 +27,7 @@ const editableFilter = (app: Application) => ({ _id: app._id, status: app.status
 export async function setCategoryAction(_: ActionState, fd: FormData): Promise<ActionState> {
   const { user, application } = await requireStudentStage("ENROLL");
   if (!canEdit(editableSections(application), SECTION_CATEGORY)) return { error: "Your enrollment type can't be changed right now." };
+  if (application.category === "PRIVATE" && paymentSettled(application)) return { error: "Your tuition is already paid. To change your enrollment type, contact the BHI office." };
   const v = validateSelection({
     enrollmentType: String(fd.get("enrollmentType") ?? ""),
     fundingProgram: String(fd.get("fundingProgram") ?? ""),
@@ -72,6 +74,7 @@ export async function setCourseAction(_: ActionState, fd: FormData): Promise<Act
   const { user, application } = await requireStudentStage("ENROLL");
   if (!application.category) return { error: "Choose Private or Non-Private first." };
   if (!canEdit(editableSections(application), SECTION_COURSE)) return { error: "Your course can't be changed right now." };
+  if (application.category === "PRIVATE" && paymentSettled(application)) return { error: "Your tuition is paid for your current course. To change course, contact the BHI office." };
   const id = z.string().uuid().safeParse(fd.get("courseId"));
   if (!id.success) return { fieldErrors: { courseId: "Choose a course" } };
   const { courses, applications } = await cols();
@@ -84,7 +87,8 @@ export async function setCourseAction(_: ActionState, fd: FormData): Promise<Act
   await audit(user._id, "application.set_course", "application", application._id, { courseId: course._id });
   revalidatePath("/enroll");
   const after = { ...application, courseId: course._id };
-  redirect(firstFormPath(after));
+  // Private: pay for the chosen course before the forms open.
+  redirect(after.category === "PRIVATE" && !paymentSettled(after) ? "/enroll/payment" : firstFormPath(after));
 }
 
 function firstFormPath(app: Application) {
@@ -106,7 +110,7 @@ export async function saveFormAction(templateKey: string, _: ActionState, fd: Fo
   if (!canEdit(editableSections(application), template.key)) {
     return { error: "This section is locked. Only sections flagged for correction can be changed." };
   }
-  if (enrollmentState(application).formsLocked) return { error: "Your tuition payment must be verified before you complete the forms." };
+  if (enrollmentState(application).formsLocked) return { error: "Pay your tuition first. Your forms open as soon as the payment goes through." };
 
   const values = coerceRaw(template, rawFromForm(template, fd));
   const { applications } = await cols();
@@ -162,7 +166,7 @@ export async function saveFormAction(templateKey: string, _: ActionState, fd: Fo
 export async function uploadDocumentAction(_: ActionState, fd: FormData): Promise<ActionState> {
   const { user, application } = await requireStudentStage("ENROLL");
   if (!canEdit(editableSections(application), SECTION_DOCUMENTS)) return { error: "Documents are locked. Only sections flagged for correction can be changed." };
-  if (enrollmentState(application).formsLocked) return { error: "Your tuition payment must be verified before you upload documents." };
+  if (enrollmentState(application).formsLocked) return { error: "Pay your tuition first. Uploads open as soon as the payment goes through." };
   if (!(await rateLimit(`upload:${user._id}`, 30, 3600))) return { error: "Too many uploads. Try again later." };
 
   const type = String(fd.get("type") ?? "");
